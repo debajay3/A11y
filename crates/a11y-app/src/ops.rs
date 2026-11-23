@@ -329,9 +329,14 @@ impl App {
     }
 
     // ------------------------------------------------------------ clipboard
+    fn clipboard_document(&self) -> String {
+        self.lib_file.as_ref().map_or_else(|| self.document_session.clone(), |file| format!("library:{}", file.id))
+    }
+
     pub fn copy_selection(&mut self) -> Option<String> {
         let tops = self.top_selection();
-        let clip = clipboard::capture(&self.doc, &tops)?;
+        let mut clip = clipboard::capture(&self.doc, &tops)?;
+        clip.source_document = Some(self.clipboard_document());
         let json = clipboard::to_json(&clip);
         self.clip = Some(clip);
         self.paste_count = 0;
@@ -339,9 +344,12 @@ impl App {
     }
 
     pub fn cut_selection(&mut self) -> Option<String> {
-        let s = self.copy_selection();
+        self.copy_selection()?;
+        let clip = self.clip.as_mut()?;
+        clip.cut = true;
+        let json = clipboard::to_json(clip);
         self.delete_selection();
-        s
+        json
     }
 
     pub fn paste(&mut self, system_text: Option<&str>) {
@@ -358,9 +366,55 @@ impl App {
         }
         let clip = system_text.and_then(clipboard::from_json).or_else(|| self.clip.clone());
         let Some(clip) = clip else { return };
-        let parent = self.container_for_insert();
-        let lists = clipboard::instantiate(&mut self.doc, &clip);
+        let mut parent = self.container_for_insert();
+        let same_document = clip.source_document.as_deref() == Some(self.clipboard_document().as_str());
+        if same_document
+            && !clip.cut
+            && clip
+                .roots
+                .iter()
+                .any(|id| self.doc.get(*id).is_some_and(|n| matches!(n.kind, NodeKind::Component(_))) && (*id == parent || self.doc.is_ancestor(*id, parent)))
+        {
+            parent = self.page;
+        }
+        let mut lists = clipboard::instantiate(&mut self.doc, &clip);
         let mut tx = Tx::new();
+        for (source, nodes) in clip.roots.iter().zip(&mut lists) {
+            let Some(root) = nodes.first() else { continue };
+            if clip.cut || !matches!(root.kind, NodeKind::Component(_)) {
+                continue;
+            }
+            let transform = root.transform;
+            let key = (clip.source_document.clone().unwrap_or_default(), *source);
+            let existing = if same_document {
+                Some(*source).filter(|id| self.doc.get(*id).is_some_and(|n| matches!(n.kind, NodeKind::Component(_))))
+            } else if clip.source_document.is_some() {
+                self.pasted_components.get(&key).copied().filter(|id| self.doc.get(*id).is_some_and(|n| matches!(n.kind, NodeKind::Component(_))))
+            } else {
+                None
+            };
+            let component = if let Some(id) = existing {
+                id
+            } else {
+                // Across files, retain a private local main component and paste its instance.
+                // Never bind a foreign numeric node ID to an unrelated component in this file.
+                let library = ensure_library_page(&mut self.doc);
+                let id = root.id;
+                let index = self.doc.get(library).map_or(0, |n| n.children.len());
+                let main = std::mem::take(nodes);
+                if tx.cmd(&mut self.doc, Command::Insert { parent: library, index, nodes: main }).is_err() {
+                    continue;
+                }
+                if clip.source_document.is_some() {
+                    self.pasted_components.insert(key, id);
+                }
+                id
+            };
+            if let Command::Insert { nodes: mut instance, .. } = create_instance(&mut self.doc, component, parent, v2(transform.tx, transform.ty)) {
+                instance[0].transform = transform;
+                *nodes = instance;
+            }
+        }
         let mut new_sel = Vec::new();
         let offset = if let Some(point) = at {
             let Some(inverse) = self.doc.world_transform(parent).invert() else { return };
@@ -829,6 +883,8 @@ impl App {
         io::ensure_page(&mut doc);
         self.page = doc.pages[0];
         self.doc = doc;
+        self.document_session = uuid::Uuid::new_v4().to_string();
+        self.pasted_components.clear();
         self.decks = Default::default();
         self.hist = History::default();
         self.history.reset();

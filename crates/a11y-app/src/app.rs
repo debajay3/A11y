@@ -55,7 +55,6 @@ impl View {
 pub enum RailItem {
     File,
     Assets,
-    Tools,
     Variables,
     Plugins,
 }
@@ -138,6 +137,8 @@ pub struct App {
     pub find: crate::find::FindState,
     pub ui: UiState,
     pub clip: Option<Clip>,
+    pub(crate) document_session: String,
+    pub(crate) pasted_components: std::collections::HashMap<(String, NodeId), NodeId>,
     pub paste_count: u32,
     pub toast: Option<Toast>,
     pub file_path: Option<PathBuf>,
@@ -185,6 +186,8 @@ pub struct App {
     pub file_hash: Option<u64>,
     /// An open waiting for the answer to "Discard unsaved changes?".
     pub pending_open: Option<crate::instance::Open>,
+    pub(crate) pending_quit: bool,
+    pub(crate) quit_ready: bool,
     /// AI images: the OpenRouter settings, the open dialog and running requests (see `aiimg`).
     pub ai: crate::aiimg::AiState,
     /// Watching the open file for changes made by other programs (see `extwatch.rs`).
@@ -219,6 +222,8 @@ impl App {
             find: Default::default(),
             ui: UiState { pixel_grid: true, ..UiState::default() },
             clip: None,
+            document_session: uuid::Uuid::new_v4().to_string(),
+            pasted_components: Default::default(),
             paste_count: 0,
             toast: None,
             file_path: None,
@@ -249,6 +254,8 @@ impl App {
             collab: Default::default(),
             file_hash: None,
             pending_open: None,
+            pending_quit: false,
+            quit_ready: false,
             ai: Default::default(),
             ext_watch: None,
         }

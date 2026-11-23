@@ -73,8 +73,26 @@ enum Action {
 
 pub(crate) fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
     ui.painter().rect_filled(rect, 0.0, theme::BG_SECONDARY);
-    let mut bar = ui.new_child(UiBuilder::new().max_rect(rect.shrink2(Vec2::new(7.0, 5.0))));
-    bar.set_clip_rect(rect);
+    // Register the background first so tabs and caption buttons take precedence.
+    let drag = ui.interact(rect, ui.id().with("window-title-drag"), Sense::click_and_drag());
+    if drag.double_clicked() {
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!ui.input(|i| i.viewport().maximized.unwrap_or(false))));
+    } else if drag.drag_started() {
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    }
+    let mut content = rect.shrink2(Vec2::new(7.0, 5.0));
+    if cfg!(target_os = "macos") && !ui.input(|i| i.viewport().fullscreen.unwrap_or(false)) {
+        content.min.x = rect.left() + 80.0;
+    }
+    if cfg!(windows) {
+        content.max.x = rect.right() - 138.0;
+        window_controls(app, ui, rect);
+    }
+    let mut bar = ui.new_child(UiBuilder::new().max_rect(content));
+    if app.dialog.is_some() {
+        bar.disable();
+    }
+    bar.set_clip_rect(content);
     let mut action = None;
     let home = app.home.is_some();
     let active = app.lib_file.as_ref().filter(|_| !home);
@@ -217,4 +235,60 @@ fn close(app: &mut App, id: String) {
         }
     }
     app.desktop_tabs.documents.retain(|tab| tab.id != id);
+}
+
+/// Windows caption buttons share the same row as the document tabs.
+fn window_controls(app: &mut App, ui: &mut Ui, rect: Rect) {
+    use egui::{Align2, Pos2, ViewportCommand};
+    let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
+    for (index, label, glyph, command) in [
+        (0, "Minimize", "−", ViewportCommand::Minimized(true)),
+        (1, if maximized { "Restore" } else { "Maximize" }, if maximized { "❐" } else { "□" }, ViewportCommand::Maximized(!maximized)),
+        (2, "Close window", "×", ViewportCommand::Close),
+    ] {
+        let button = Rect::from_min_size(Pos2::new(rect.right() - 138.0 + index as f32 * 46.0, rect.top()), Vec2::new(46.0, rect.height()));
+        let response = ui.interact(button, ui.id().with(("caption", index)), Sense::click());
+        response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, label));
+        if response.hovered() {
+            ui.painter().rect_filled(button, 0.0, if index == 2 { egui::Color32::from_rgb(196, 43, 28) } else { theme::BG_TERTIARY });
+        }
+        ui.painter().text(button.center(), Align2::CENTER_CENTER, glyph, theme::font_large_strong(), theme::TEXT);
+        if response.on_hover_text(label).clicked() {
+            if index == 2 {
+                app.request_quit(ui.ctx());
+            } else {
+                ui.ctx().send_viewport_cmd(command);
+            }
+        }
+    }
+}
+
+/// Restore edge resizing when Windows' native title bar is replaced.
+pub(crate) fn resize_edges(ctx: &egui::Context, rect: Rect) {
+    use egui::{CursorIcon, ResizeDirection as D, ViewportCommand};
+    if ctx.input(|i| i.viewport().maximized.unwrap_or(false) || i.viewport().fullscreen.unwrap_or(false)) {
+        return;
+    }
+    let Some(p) = ctx.pointer_hover_pos().filter(|p| rect.contains(*p)) else { return };
+    let left = p.x - rect.left() < 6.0;
+    let right = rect.right() - p.x < 6.0;
+    let top = p.y - rect.top() < 6.0;
+    let bottom = rect.bottom() - p.y < 6.0;
+    let edge = match (left, right, top, bottom) {
+        (true, _, true, _) => Some((D::NorthWest, CursorIcon::ResizeNwSe)),
+        (_, true, true, _) => Some((D::NorthEast, CursorIcon::ResizeNeSw)),
+        (true, _, _, true) => Some((D::SouthWest, CursorIcon::ResizeNeSw)),
+        (_, true, _, true) => Some((D::SouthEast, CursorIcon::ResizeNwSe)),
+        (true, _, _, _) => Some((D::West, CursorIcon::ResizeHorizontal)),
+        (_, true, _, _) => Some((D::East, CursorIcon::ResizeHorizontal)),
+        (_, _, true, _) => Some((D::North, CursorIcon::ResizeVertical)),
+        (_, _, _, true) => Some((D::South, CursorIcon::ResizeVertical)),
+        _ => None,
+    };
+    if let Some((direction, cursor)) = edge {
+        ctx.set_cursor_icon(cursor);
+        if ctx.input(|i| i.pointer.primary_pressed()) {
+            ctx.send_viewport_cmd(ViewportCommand::BeginResize(direction));
+        }
+    }
 }

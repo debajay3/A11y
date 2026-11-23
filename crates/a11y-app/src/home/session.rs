@@ -240,7 +240,7 @@ impl App {
     /// [`Self::save_library_file`]; with `only_changes` a document identical to the saved one is
     /// not rewritten. The document is serialized once, for both the comparison and the write.
     /// Returns whether the file was written.
-    fn write_library_file(&mut self, only_changes: bool) -> Result<bool, String> {
+    pub(crate) fn write_library_file(&mut self, only_changes: bool) -> Result<bool, String> {
         crate::decks::ui::flush_notes(self);
         let (Some(lib), Some(lf)) = (self.lib.clone(), self.lib_file.clone()) else { return Err("This file is not in the library".into()) };
         if self.history.viewing.is_some() {

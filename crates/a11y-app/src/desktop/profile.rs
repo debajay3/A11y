@@ -1,7 +1,7 @@
 use crate::{theme, widgets};
 use egui::{Align2, Id, Rect, Sense, Ui, Vec2};
 
-pub(crate) fn show(ui: &mut Ui, area: Rect, name: &str) -> bool {
+pub(crate) fn show(ui: &mut Ui, area: Rect, name: &str, anchor: &mut Option<Rect>, actions: &mut Vec<crate::home::Act>) {
     let response = ui.interact(area, Id::new("home-profile"), Sense::click());
     let painter = ui.painter().with_clip_rect(area);
     widgets::button_bg(&painter, area, &response, false, theme::cr(theme::RADIUS_MEDIUM));
@@ -13,5 +13,19 @@ pub(crate) fn show(ui: &mut Ui, area: Rect, name: &str) -> bool {
     painter.with_clip_rect(name_rect).text(name_rect.left_center(), Align2::LEFT_CENTER, name, theme::font_body_strong(), theme::TEXT);
     crate::icons::paint(&painter, crate::icons::Icon::ChevronDown, area.right_center() - Vec2::new(16.0, 0.0), 12.0, theme::ICON_SECONDARY);
     widgets::record(ui, "home-profile", area);
-    response.on_hover_text("Edit your display name").clicked()
+    if response.on_hover_text("Profile menu").clicked() {
+        *anchor = if anchor.is_some() { None } else { Some(area) };
+    }
+    use crate::widgets::menu::{popup_menu, MenuItem, MenuResult};
+    if let Some(rect) = *anchor {
+        let items = [MenuItem::new("Edit display name"), MenuItem::new("Sign out")];
+        match popup_menu(ui.ctx(), Id::new("profile-menu"), rect.left_bottom(), rect.width(), &items, Some(rect)) {
+            MenuResult::Picked(index) => {
+                *anchor = None;
+                actions.push(if index == 0 { crate::home::Act::EditProfile } else { crate::home::Act::SignOut });
+            }
+            MenuResult::Closed => *anchor = None,
+            MenuResult::Open => {}
+        }
+    }
 }

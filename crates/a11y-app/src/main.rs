@@ -162,6 +162,13 @@ fn main() {
         .with_title(theme::display_title())
         .with_inner_size([w as f32, h as f32])
         .with_min_inner_size([theme::MIN_WINDOW.0, theme::MIN_WINDOW.1]);
+    if cfg!(feature = "enhanced-desktop") && !screenshot_mode {
+        if cfg!(target_os = "macos") {
+            viewport = viewport.with_fullsize_content_view(true).with_title_shown(false).with_titlebar_shown(false);
+        } else if cfg!(windows) {
+            viewport = viewport.with_decorations(false);
+        }
+    }
     if let Some(icon) = window_icon() {
         viewport = viewport.with_icon(icon);
     }

@@ -46,6 +46,7 @@ pub struct Shell {
     app: App,
     shot: Option<Shot>,
     title: String,
+    native_titlebar: bool,
     /// Listens for links and files handed over by a second launch; `None` when another editor owns it.
     _instance: Option<crate::instance::Instance>,
 }
@@ -72,6 +73,7 @@ impl Shell {
         // unless a language was saved).
         crate::i18n::set(crate::i18n::startup(library.as_deref(), !screenshot));
         let mut shell = Self::build(&cc.egui_ctx, opts);
+        shell.native_titlebar = !screenshot;
         if let Some(rs) = &cc.wgpu_render_state {
             if let Some(max) = canvas::gpu::init(rs) {
                 shell.app.canvas.gpu.available = true;
@@ -297,7 +299,7 @@ impl Shell {
             requested_at: None,
             requests: 0,
         });
-        Self { app, shot, title: String::new(), _instance: None }
+        Self { app, shot, title: String::new(), native_titlebar: false, _instance: None }
     }
 
     fn drive_screenshot(&mut self, ctx: &Context) {
@@ -676,6 +678,9 @@ impl eframe::App for Shell {
     /// calls keep being answered; the bridge server requests a repaint for each one.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.app.now = ctx.input(|i| i.time);
+        if self.app.quit_ready {
+            self.app.finish_quit(ctx);
+        }
         self.app.poll_external_change(ctx);
         if self.app.ext_watch.is_some() {
             // Keep polling even while nothing else asks for frames.
@@ -790,6 +795,9 @@ impl Shell {
     /// One full UI pass over the window.
     pub fn draw(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        if self.native_titlebar && cfg!(windows) && cfg!(feature = "enhanced-desktop") {
+            crate::desktop::tabs::resize_edges(&ctx, ui.max_rect());
+        }
         self.app.now = ctx.input(|i| i.time);
         self.app.poll_plugins();
         self.app.poll_updater(&ctx);
@@ -804,16 +812,11 @@ impl Shell {
         }
         self.app.scrub_sync(&ctx);
         let mut body;
-        let ui = if cfg!(feature = "enhanced-desktop") && self.app.lib.is_some() && self.app.proto.present.is_none() {
+        let ui = if cfg!(feature = "enhanced-desktop") && (self.native_titlebar || self.app.lib.is_some()) && self.app.proto.present.is_none() {
             let full = ui.max_rect();
             let bottom = full.top() + crate::desktop::tabs::HEIGHT;
             let header = Rect::from_min_max(full.min, Pos2::new(full.right(), bottom));
-            if self.app.dialog.is_some() {
-                // Dialogs must own focus and prevent tab actions.
-                ui.painter().rect_filled(header, 0.0, theme::BG_SECONDARY);
-            } else {
-                crate::desktop::tabs::show(&mut self.app, ui, header);
-            }
+            crate::desktop::tabs::show(&mut self.app, ui, header);
             body = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(Pos2::new(full.left(), bottom), full.max)));
             &mut body
         } else {

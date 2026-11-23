@@ -43,6 +43,19 @@ impl Workspace {
         }
         self.project = "Shared project".into();
     }
+    fn sign_out(&mut self) -> Result<(), String> {
+        if let Some(root) = &self.settings_root {
+            save_private(root, "a11y-shared-cache.json", &Catalog::default())?;
+            save_private(root, "a11y-workspace.json", &Connection { url: self.connection.url.clone(), key: String::new() })?;
+        }
+        let root = self.settings_root.clone();
+        let url = self.connection.url.clone();
+        *self = Self::default(); // Drops pending replies so an old request cannot restore the session.
+        self.settings_root = root;
+        self.connection.url = url;
+        Ok(())
+    }
+
     pub fn configured(&self) -> bool {
         !self.connection.key.is_empty()
     }
@@ -117,6 +130,32 @@ fn save_private(root: &Path, name: &str, value: &impl Serialize) -> Result<(), S
     std::fs::rename(temp, path).map_err(|e| e.to_string())
 }
 impl App {
+    pub(crate) fn sign_out_workspace(&mut self) {
+        if !self.leave_ok(|app| app.sign_out_workspace()) {
+            return;
+        }
+        self.go_home();
+        if self.home.is_none() {
+            return;
+        }
+        if let Err(error) = self.workspace.sign_out() {
+            self.show_toast(format!("Could not sign out: {error}"), true);
+            return;
+        }
+        self.end_collab();
+        self.cancel_join();
+        self.stop_bridge();
+        self.desktop_tabs = Default::default();
+        self.clip = None;
+        self.parked_home = None;
+        self.set_author("Guest");
+        if let Some(home) = &mut self.home {
+            home.section = Section::Shared;
+            home.profile_menu = None;
+        }
+        self.show_toast("Signed out. Reconnect to the shared library to access team files.", false);
+    }
+
     pub fn publish_to_workspace(&mut self, text: String) {
         let again = text.clone();
         if !self.leave_ok(move |app| app.publish_to_workspace(again)) {
@@ -297,6 +336,25 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect, search: &str) -> Option<(Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn signing_out_forgets_credentials_and_cached_files_across_restart() {
+        let root = std::env::temp_dir().join(format!("a11y-signout-{}", a11y_library::new_id()));
+        std::fs::create_dir_all(&root).unwrap();
+        save_private(&root, "a11y-workspace.json", &Connection { url: "http://127.0.0.1:49180".into(), key: "test-key".into() }).unwrap();
+        let mut workspace = Workspace::default();
+        workspace.load(&root);
+        let (sender, receiver) = mpsc::channel();
+        workspace.receiver = Some(receiver);
+        workspace.sign_out().unwrap();
+        assert!(!workspace.configured());
+        assert!(sender.send(Ok(Reply::Listed(Catalog::default()))).is_err());
+        let mut restored = Workspace::default();
+        restored.load(&root);
+        assert!(!restored.configured());
+        assert!(restored.catalog.files.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn connection_and_cached_catalog_survive_an_app_restart() {
         let root = std::env::temp_dir().join(format!("a11y-client-{}", a11y_library::new_id()));

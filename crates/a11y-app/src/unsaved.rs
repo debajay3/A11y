@@ -12,6 +12,31 @@ use crate::{theme, widgets};
 use egui::{Align2, Color32, Context, Id, Key, Modifiers, Order, Pos2, Rect, Sense, Vec2};
 
 impl App {
+    pub(crate) fn request_quit(&mut self, ctx: &Context) {
+        let again = ctx.clone();
+        if !self.leave_ok(move |app| app.request_quit(&again)) {
+            return;
+        }
+        if self.edits_unsaved() {
+            self.pending_quit = true;
+        } else {
+            self.finish_quit(ctx);
+        }
+    }
+
+    pub(crate) fn finish_quit(&mut self, ctx: &Context) {
+        self.quit_ready = false;
+        crate::decks::ui::flush_notes(self);
+        if self.lib_file.is_some() && self.history.viewing.is_none() {
+            if let Err(error) = self.write_library_file(true) {
+                self.show_toast(error, true);
+                return;
+            }
+        }
+        self.save_close_version();
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
     /// Edits since the document was opened or last saved to a file (library files autosave).
     pub fn edits_unsaved(&self) -> bool {
         if self.lib_file.is_some() {
@@ -46,6 +71,11 @@ impl App {
 
     /// What a confirmed question leads to: the pending open, or else the restart.
     fn proceed(&mut self, open: Option<Open>) {
+        if self.pending_quit {
+            self.pending_quit = false;
+            self.quit_ready = true;
+            return;
+        }
         match open {
             Some(open) => self.perform_open(open),
             None => self.confirm_restart(),
@@ -61,7 +91,7 @@ enum Answer {
 
 pub fn dialog(app: &mut App, ctx: &Context) {
     let open = app.pending_open.clone();
-    if open.is_none() && !app.updater.pending_restart {
+    if open.is_none() && !app.updater.pending_restart && !app.pending_quit {
         return;
     }
     let screen = ctx.content_rect();
@@ -72,6 +102,7 @@ pub fn dialog(app: &mut App, ctx: &Context) {
         (true, _) => "You are in a live session. Opening this leaves it.",
         (false, Some(Open::Link(_))) => "Joining a session replaces this document.",
         (false, Some(Open::File(_))) => "Opening this file replaces the current document.",
+        (false, None) if app.pending_quit => "Closing A11y closes this document.",
         (false, None) => "Restarting to install the update closes this document.",
     };
     let rect = Rect::from_center_size(screen.center() - Vec2::new(0.0, 24.0), Vec2::new(W, PAD + 24.0 + 12.0 + 44.0 + 32.0 + PAD));
@@ -106,6 +137,7 @@ pub fn dialog(app: &mut App, ctx: &Context) {
     match answer {
         None => {}
         Some(Answer::Cancel) => {
+            app.pending_quit = false;
             app.pending_open = None;
             app.updater.pending_restart = false;
         }
@@ -121,6 +153,8 @@ pub fn dialog(app: &mut App, ctx: &Context) {
             // a cancelled Save as… (or a failed save) keeps the work and the document
             if !app.edits_unsaved() {
                 app.proceed(open);
+            } else {
+                app.pending_quit = false;
             }
         }
     }

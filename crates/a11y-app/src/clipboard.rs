@@ -72,6 +72,10 @@ pub struct Clip {
     magic: u32,
     pub roots: Vec<NodeId>,
     pub nodes: Vec<Node>,
+    #[serde(default)]
+    pub source_document: Option<String>,
+    #[serde(default)]
+    pub cut: bool,
 }
 
 /// Serializes `ids` (and their subtrees) from `doc`.
@@ -83,7 +87,7 @@ pub fn capture(doc: &Document, ids: &[NodeId]) -> Option<Clip> {
     if nodes.is_empty() {
         return None;
     }
-    Some(Clip { magic: MAGIC, roots: ids.to_vec(), nodes })
+    Some(Clip { magic: MAGIC, roots: ids.to_vec(), nodes, source_document: None, cut: false })
 }
 
 pub fn to_json(clip: &Clip) -> Option<String> {
@@ -171,5 +175,66 @@ mod tests {
         assert_eq!(copy[0].children, vec![copy[1].id]);
         assert_eq!(copy[1].parent, Some(copy[0].id));
         assert!(d.get(copy[0].id).is_none(), "clone is not inserted yet");
+    }
+}
+
+#[cfg(test)]
+mod component_paste_tests {
+    use super::*;
+    fn component_app() -> (App, NodeId) {
+        let mut doc = Document::new("Components");
+        let page = doc.alloc_id();
+        let mut p = Node::new(page, NodeKind::Page { background: a11y_doc::Color::WHITE });
+        let id = doc.alloc_id();
+        let mut n = Node::new(id, NodeKind::Component(Default::default()));
+        n.parent = Some(page);
+        n.name = "Button".into();
+        n.size = Vec2::new(100.0, 40.0);
+        p.children.push(id);
+        doc.nodes.insert(page, p);
+        doc.nodes.insert(id, n);
+        doc.pages.push(page);
+        let mut app = App::new(doc);
+        app.selection = vec![id];
+        (app, id)
+    }
+    #[test]
+    fn copied_component_pastes_a_linked_instance_as_one_undo_step() {
+        let (mut app, component) = component_app();
+        let text = app.copy_selection().unwrap();
+        app.paste(Some(&text));
+        let instance = app.selection[0];
+        assert!(matches!(app.doc.get(instance).unwrap().kind, NodeKind::Instance { component: Some(c), .. } if c == component));
+        assert_eq!(app.doc.get(instance).unwrap().component.source, Some(component));
+        assert_eq!(app.doc.nodes.values().filter(|n| matches!(n.kind, NodeKind::Component(_))).count(), 1);
+        assert!(app.undo());
+        assert!(app.doc.get(instance).is_none());
+        assert!(app.doc.get(component).is_some());
+        assert!(app.redo());
+        assert!(app.doc.get(instance).is_some());
+    }
+    #[test]
+    fn cross_file_component_paste_never_links_to_an_unrelated_numeric_id() {
+        let (mut source, id) = component_app();
+        let text = source.copy_selection().unwrap();
+        let (mut target, collision) = component_app();
+        assert_eq!(id, collision);
+        target.doc.get_mut(collision).unwrap().name = "Unrelated".into();
+        target.paste(Some(&text));
+        let instance = target.selection[0];
+        let NodeKind::Instance { component: Some(main), .. } = target.doc.get(instance).unwrap().kind else { panic!("not an instance") };
+        assert_ne!(main, collision);
+        assert_eq!(target.doc.get(main).unwrap().parent, target.doc.library_page);
+        assert_eq!(target.doc.get(main).unwrap().name, "Button");
+        target.paste(Some(&text));
+        assert!(matches!(target.doc.get(target.selection[0]).unwrap().kind, NodeKind::Instance { component: Some(c), .. } if c == main));
+    }
+    #[test]
+    fn cut_component_preserves_the_main_component_when_moved() {
+        let (mut app, component) = component_app();
+        let text = app.cut_selection().unwrap();
+        assert!(app.doc.get(component).is_none());
+        app.paste(Some(&text));
+        assert!(matches!(app.doc.get(app.selection[0]).unwrap().kind, NodeKind::Component(_)));
     }
 }

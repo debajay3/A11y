@@ -478,3 +478,18 @@ fn tab_switch_does_not_leave_a_document_when_saving_fails() {
     assert_eq!(s.app().lib_file.as_ref().unwrap().id, first.id);
     assert_eq!(s.app().doc.get(layer).unwrap().name, "Unsaved edit");
 }
+
+#[test]
+fn profile_dropdown_offers_sign_out_without_removing_local_files() {
+    let (mut s, _d) = home_sim();
+    let before = s.app().home.as_ref().unwrap().snap.files.len();
+    click_rect(&mut s, "home-profile");
+    s.frame(vec![]);
+    assert!(s.app().home.as_ref().unwrap().profile_menu.is_some());
+    assert!(s.app().dialog.is_none(), "profile button opens a menu instead of editing immediately");
+    crate::home::apply(&mut s.shell.app, Act::SignOut);
+    s.frame(vec![]);
+    assert!(!s.app().workspace.configured());
+    assert_eq!(s.app().home.as_ref().unwrap().snap.files.len(), before);
+    assert_eq!(s.shell.app.author(), "Guest");
+}

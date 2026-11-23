@@ -117,3 +117,32 @@ fn escape_closes_the_palette() {
     s.key(Key::Escape);
     assert_eq!(s.app().ui.menu, None);
 }
+
+#[test]
+fn file_rail_restores_layers_instead_of_opening_the_file_menu() {
+    let mut s = Sim::new();
+    s.shell.app.ui.left_collapsed = true;
+    s.shell.app.ui.rail = Some(crate::app::RailItem::Assets);
+    s.click(Pos2::new(28.0, 84.0));
+    assert!(s.app().ui.menu.is_none());
+    assert!(s.app().ui.rail.is_none());
+    assert!(!s.app().ui.left_collapsed);
+    assert!(!crate::panels::rail::ITEMS.iter().any(|(_, _, label, _)| *label == "Tools"));
+}
+
+#[test]
+fn caption_close_asks_before_discarding_unsaved_edits() {
+    let mut s = Sim::new();
+    let id = s.by_name("Card");
+    s.shell.app.selection = vec![id];
+    s.shell.app.delete_selection();
+    let ctx = s.ctx.clone();
+    s.shell.app.request_quit(&ctx);
+    s.frame(vec![]);
+    assert!(s.app().pending_quit);
+    let cancel = s.rect_of("unsaved-cancel");
+    s.click(cancel.center());
+    assert!(!s.app().pending_quit);
+    assert!(!s.app().quit_ready);
+    assert!(s.app().edits_unsaved());
+}

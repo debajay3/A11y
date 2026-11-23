@@ -105,6 +105,7 @@ pub struct Home {
     pub menu: Option<(Target, Pos2)>,
     pub sort_menu: Option<Rect>,
     pub organization_menu: Option<Rect>,
+    pub profile_menu: Option<Rect>,
     /// File being dragged: (id, name).
     pub drag: Option<(String, String)>,
     /// Drop zones drawn this frame.
@@ -138,6 +139,7 @@ impl Home {
             menu: None,
             sort_menu: None,
             organization_menu: None,
+            profile_menu: None,
             drag: None,
             drop_rects: vec![],
             scroll: 0.0,
@@ -245,6 +247,7 @@ pub enum Act {
     /// Opens the Claude connection dialog.
     Mcp,
     EditProfile,
+    SignOut,
     NewOrganization,
     SwitchOrganization(Option<String>),
     NewProject,
@@ -491,6 +494,7 @@ pub fn apply(app: &mut App, act: Act) {
             }
         }
         Act::EditProfile => app.ask_author_name(),
+        Act::SignOut => app.sign_out_workspace(),
         Act::NewOrganization => app.dialog = Some(Dialog::prompt(Intent::NewOrganization, "New organization", "", "Create")),
         Act::SwitchOrganization(id) => {
             app.switch_organization(id);
