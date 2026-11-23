@@ -14,7 +14,8 @@ name = "a11y-server"
 path = "src/main.rs"
 
 [dependencies]
-tiny_http = "0.12"
+a11y-auth = { path = "../a11y-auth" }
+tiny_http = { version = "0.12", features = ["ssl-rustls"] }
 
 a11y-doc.workspace = true
 a11y-collab.workspace = true

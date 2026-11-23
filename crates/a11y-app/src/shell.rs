@@ -73,6 +73,9 @@ impl Shell {
         // unless a language was saved).
         crate::i18n::set(crate::i18n::startup(library.as_deref(), !screenshot));
         let mut shell = Self::build(&cc.egui_ctx, opts);
+        if !screenshot {
+            shell.app.accounts.load();
+        }
         shell.native_titlebar = !screenshot;
         if let Some(rs) = &cc.wgpu_render_state {
             if let Some(max) = canvas::gpu::init(rs) {
@@ -107,7 +110,7 @@ impl Shell {
         }
         // --bridge turns the agent bridge on for this launch only; the Preferences toggle saves it
         let saved_bridge = library.as_deref().and_then(|l| crate::comments::settings::load_flag(l, crate::bridge::FLAG)) == Some(true);
-        if launch && (bridge_flag || saved_bridge) {
+        if launch && shell.app.accounts.ready() && (bridge_flag || saved_bridge) {
             if let Err(e) = shell.app.start_bridge(&cc.egui_ctx) {
                 shell.app.show_toast(e, true);
             }
@@ -681,6 +684,10 @@ impl eframe::App for Shell {
         if self.app.quit_ready {
             self.app.finish_quit(ctx);
         }
+        if !self.app.accounts.ready() {
+            self.app.stop_bridge();
+            return;
+        }
         self.app.poll_external_change(ctx);
         if self.app.ext_watch.is_some() {
             // Keep polling even while nothing else asks for frames.
@@ -693,6 +700,16 @@ impl eframe::App for Shell {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if self.app.account_gate(ui) {
+            self.app.poll_updater(ui.ctx());
+            self.app.poll_install(ui.ctx());
+            crate::updater::ui::show(&mut self.app, ui.ctx());
+            if ui.ctx().input(|i| i.viewport().close_requested()) {
+                crate::updater::install::run_stashed();
+            }
+            return;
+        }
+        self.app.account_admin(ui.ctx());
         self.app.poll_fonts();
         if self.app.fonts.is_loading() {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));

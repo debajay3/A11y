@@ -51,12 +51,21 @@ impl HostWire for Wire<'_> {
     }
 }
 
+type AccessValidator = dyn Fn(&str) -> Option<Role> + Send + Sync;
+#[derive(Clone)]
+pub struct AccessCheck(pub Arc<AccessValidator>);
+impl std::fmt::Debug for AccessCheck {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("AccessCheck(<redacted>)")
+    }
+}
 #[derive(Clone, Debug)]
 pub struct Config {
     /// Document to serve: `.a11y`, or a `.fig` / `.pen` / REST `.json` / `.svg` that is imported and
     /// saved next to it as `.a11y`.
     pub file: PathBuf,
     pub password: Option<String>,
+    pub access_check: Option<AccessCheck>,
     /// Guests may look but not edit.
     pub view_only: bool,
     /// Label in the log.
@@ -88,6 +97,7 @@ impl Config {
         Self {
             file: file.into(),
             password: None,
+            access_check: None,
             view_only: false,
             name: "Server".into(),
             key_file: None,
@@ -105,6 +115,7 @@ struct Guest {
     /// The transport's number for this guest.
     net: u32,
     name: String,
+    role: Role,
 }
 
 pub struct Server {
@@ -132,6 +143,7 @@ impl Server {
         let key_path = cfg.key_file.clone().unwrap_or_else(|| key::default_key_path(&doc_path));
         let secret_key = load_or_create_key(&key_path)?;
         let host = Host::start(HostOptions {
+            credential_check: cfg.access_check.clone().map(|check| a11y_net::CredentialCheck(Arc::new(move |token| (check.0)(token).is_some()))),
             password: cfg.password.clone().filter(|p| !p.is_empty()),
             network: cfg.network,
             secret_key: Some(secret_key),
@@ -214,6 +226,13 @@ impl Server {
                 self.host.sever(net);
             }
         }
+        if self.cfg.access_check.is_some() {
+            let invalid: Vec<_> = self.peers.values().filter(|g| self.managed_role(g.net) != Some(g.role)).map(|g| g.net).collect();
+            for peer in invalid {
+                self.host.kick(peer);
+                self.handle(HostEvent::PeerLeft { peer });
+            }
+        }
         let mut next = self.host.recv_timeout(wait);
         while let Some(ev) = next {
             self.handle(ev);
@@ -253,6 +272,12 @@ impl Server {
         self.peers.iter().find(|(_, g)| g.net == net).map(|(c, _)| *c)
     }
 
+    fn managed_role(&self, peer: u32) -> Option<Role> {
+        match &self.cfg.access_check {
+            Some(check) => self.host.credential(peer).and_then(|c| (check.0)(&c)),
+            None => Some(self.cfg.role()),
+        }
+    }
     fn handle(&mut self, ev: HostEvent) {
         match ev {
             HostEvent::Ready(_) => {}
@@ -261,13 +286,22 @@ impl Server {
             HostEvent::JoinRequest { request, .. } => self.host.respond(request, true),
             HostEvent::JoinRefused { name, error, .. } => self.log(&format!("{name} could not join: {error}")),
             HostEvent::PeerJoined { peer, name } => {
+                let Some(role) = self.managed_role(peer) else {
+                    self.host.kick(peer);
+                    return;
+                };
                 let peers = &self.peers;
-                let j = wire::admit(&mut self.sess, &Wire(&self.host), &self.doc, peer, self.cfg.role(), |cp| peers.get(&cp).map(|g| g.net));
+                let j = wire::admit(&mut self.sess, &Wire(&self.host), &self.doc, peer, role, |cp| peers.get(&cp).map(|g| g.net));
+                if self.cfg.access_check.is_some() {
+                    if let (Some(resume), Some(credential)) = (self.sess.token(j.peer), self.host.credential(peer)) {
+                        self.host.bind_resume(resume, &credential);
+                    }
+                }
                 // The newcomer sees the guests already here without waiting for their next update.
                 for bytes in self.presence.values() {
                     let _ = self.host.send_presence(peer, bytes);
                 }
-                self.peers.insert(j.peer, Guest { net: peer, name: name.clone() });
+                self.peers.insert(j.peer, Guest { net: peer, name: name.clone(), role });
                 self.log(&format!("{name} {} ({} online)", if j.resumed { "reconnected" } else { "joined" }, self.peers.len()));
             }
             HostEvent::PeerLeft { peer } => {
@@ -280,6 +314,10 @@ impl Server {
                 self.log(&format!("{name} left ({} online)", self.peers.len()));
             }
             HostEvent::Message { peer, bytes } => {
+                if self.managed_role(peer) != self.session_peer(peer).and_then(|cp| self.peers.get(&cp).map(|g| g.role)) {
+                    self.host.kick(peer);
+                    return;
+                }
                 let Some(cp) = self.session_peer(peer) else { return };
                 match serde_json::from_slice(&bytes) {
                     Ok(ToHost::Sync(msg)) => {

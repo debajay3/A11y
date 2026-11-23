@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/a11y-doc",
+    "crates/a11y-auth",
     "crates/a11y-engine",
     "crates/a11y-render",
     "crates/a11y-fonts",

@@ -159,6 +159,7 @@ pub struct App {
     /// Some while the home screen (file browser) is showing instead of the editor.
     pub home: Option<crate::home::Home>,
     pub workspace: crate::workspace::Workspace,
+    pub(crate) accounts: crate::accounts::Accounts,
     pub(crate) parked_home: Option<crate::home::Home>,
     /// The open modal dialog (prompts, confirmations, shortcuts, About).
     pub dialog: Option<crate::home::Dialog>,
@@ -239,6 +240,7 @@ impl App {
             lib_file: None,
             home: None,
             workspace: Default::default(),
+            accounts: Default::default(),
             parked_home: None,
             dialog: None,
             autosave: Default::default(),

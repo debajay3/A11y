@@ -32,10 +32,24 @@ pub struct Workspace {
     receiver: Option<Receiver<Result<Reply, String>>>,
     next_refresh: f64,
     connected: bool,
+    managed: bool,
 }
 impl Workspace {
+    pub fn use_session(&mut self, url: &str, token: &str) {
+        self.connection = Connection { url: url.into(), key: token.into() };
+        self.managed = true;
+        self.next_refresh = 0.;
+        self.receiver = None;
+        self.catalog = Catalog::default();
+    }
     pub fn load(&mut self, root: &Path) {
         self.settings_root = Some(root.to_path_buf());
+        if self.managed {
+            self.catalog = Catalog::default();
+            self.next_refresh = 0.;
+            self.receiver = None;
+            return;
+        }
         self.connection = std::fs::read(root.join("a11y-workspace.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         self.catalog = std::fs::read(root.join("a11y-shared-cache.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         if self.connection.url.is_empty() {
@@ -76,7 +90,7 @@ impl Workspace {
 }
 fn request<T: serde::de::DeserializeOwned>(c: &Connection, method: &str, path: &str, body: Option<String>) -> Result<T, String> {
     let url = url::Url::parse(c.url.trim()).map_err(|_| "Enter a server address, for example http://192.168.1.10:49180".to_string())?;
-    if !matches!(url.scheme(), "http" | "https")
+    if url.scheme() != "https"
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
@@ -86,12 +100,12 @@ fn request<T: serde::de::DeserializeOwned>(c: &Connection, method: &str, path: &
     {
         return Err("Use the server's http:// or https:// address without a path, password, or query".into());
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(40)).redirects(0).build();
+    let agent = crate::accounts::agent()?;
     let req = agent.request(method, &format!("{}{}", c.url.trim().trim_end_matches('/'), path)).set("Authorization", &format!("Bearer {}", c.key.trim()));
     let result = if let Some(body) = body { req.set("Content-Type", "application/json").send_string(&body) } else { req.call() };
     let response = match result {
         Ok(r) => r,
-        Err(ureq::Error::Status(401, _)) => return Err("The workspace key is incorrect. Check it with the server owner.".into()),
+        Err(ureq::Error::Status(401, _)) => return Err("Your account session expired. Sign out and sign in again.".into()),
         Err(ureq::Error::Status(_, r)) => {
             let mut text = String::new();
             let _ = r.into_reader().take(8192).read_to_string(&mut text);
@@ -142,6 +156,7 @@ impl App {
             self.show_toast(format!("Could not sign out: {error}"), true);
             return;
         }
+        self.accounts.logout();
         self.end_collab();
         self.cancel_join();
         self.stop_bridge();
@@ -197,7 +212,7 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect, search: &str) -> Option<(Str
                             }
                             Reply::Opened(link) => opened = Some(link),
                         }
-                        if let Some(root) = w.settings_root.as_deref() {
+                        if let Some(root) = w.settings_root.as_deref().filter(|_| !w.managed) {
                             if let Err(e) =
                                 save_private(root, "a11y-workspace.json", &w.connection).and_then(|_| save_private(root, "a11y-shared-cache.json", &w.catalog))
                             {
@@ -226,20 +241,27 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect, search: &str) -> Option<(Str
         ui.heading("Shared library");
         ui.label("One place for your team's files. Reopen a file here to continue collaborating.");
         ui.add_space(16.0);
-        egui::CollapsingHeader::new("Workspace connection").default_open(!w.connected).show(ui, |ui| {
-            ui.label("Server address");
-            let busy = w.receiver.is_some();
-            ui.add_enabled(!busy, egui::TextEdit::singleline(&mut w.connection.url).desired_width(360.0));
-            ui.label("Workspace key");
-            ui.add_enabled(!busy, egui::TextEdit::singleline(&mut w.connection.key).password(true).desired_width(360.0));
-            ui.small("Local demo: everyone with this key can browse, publish and edit. Use a trusted network.");
-            if ui.add_enabled(!busy && !w.connection.key.trim().is_empty(), egui::Button::new("Connect and remember")).clicked() {
-                w.connection.url = w.connection.url.trim().trim_end_matches('/').to_string();
-                w.connection.key = w.connection.key.trim().to_string();
-                w.catalog = Catalog::default();
-                w.start(&ctx, |c| list(&c).map(Reply::Listed));
-            }
-        });
+        if app.accounts.session.as_ref().is_some_and(|s| s.user.admin) && ui.button("Admin · People and access").clicked() {
+            app.accounts.admin_open = true;
+        }
+        if w.managed {
+            ui.label(format!("Signed in · {}", w.connection.url));
+        } else {
+            egui::CollapsingHeader::new("Workspace connection").default_open(!w.connected).show(ui, |ui| {
+                ui.label("Server address");
+                let busy = w.receiver.is_some();
+                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut w.connection.url).desired_width(360.0));
+                ui.label("Workspace key");
+                ui.add_enabled(!busy, egui::TextEdit::singleline(&mut w.connection.key).password(true).desired_width(360.0));
+                ui.small("Local demo: everyone with this key can browse, publish and edit. Use a trusted network.");
+                if ui.add_enabled(!busy && !w.connection.key.trim().is_empty(), egui::Button::new("Connect and remember")).clicked() {
+                    w.connection.url = w.connection.url.trim().trim_end_matches('/').to_string();
+                    w.connection.key = w.connection.key.trim().to_string();
+                    w.catalog = Catalog::default();
+                    w.start(&ctx, |c| list(&c).map(Reply::Listed));
+                }
+            });
+        }
         ui.add_space(8.0);
         if w.receiver.is_some() {
             ui.horizontal(|ui| {

@@ -432,3 +432,46 @@ fn a_severed_guest_resumes_as_the_same_peer_and_edits_converge() {
     server.shutdown().unwrap();
     let _ = std::fs::remove_dir_all(d);
 }
+
+#[test]
+fn managed_sessions_require_live_access_and_revoke_connections() {
+    let d = dir("managed-auth");
+    let path = d.join("shared.a11y");
+    seed(&path);
+    let allowed = Arc::new(AtomicBool::new(true));
+    let check = allowed.clone();
+    let mut cfg = config(&path, free_port());
+    cfg.password = None;
+    cfg.access_check =
+        Some(a11y_server::AccessCheck(Arc::new(
+            move |token| {
+                if check.load(Ordering::Relaxed) && token == "valid-session" {
+                    Some(Role::Viewer)
+                } else {
+                    None
+                }
+            },
+        )));
+    let server = Server::start(cfg).unwrap();
+    let link = server.link().to_string();
+    let running = Running::start(server);
+    assert!(join(&link, "Anonymous", None).is_err());
+    assert!(join(&link, "Old key", Some("old-workspace-key")).is_err());
+    let guest = join(&link, "Viewer", Some("valid-session")).unwrap();
+    let (_, _, role, _) = open(&guest);
+    assert_eq!(role, Role::Viewer);
+    allowed.store(false, Ordering::Relaxed);
+    let until = Instant::now() + T;
+    let mut disconnected = false;
+    while Instant::now() < until {
+        if matches!(guest.recv_timeout(Duration::from_millis(100)), Some(GuestEvent::Disconnected(_))) {
+            disconnected = true;
+            break;
+        }
+    }
+    assert!(disconnected, "revoked user must be disconnected");
+    assert!(join(&link, "Revoked", Some("valid-session")).is_err());
+    drop(guest);
+    running.stop().shutdown().unwrap();
+    let _ = std::fs::remove_dir_all(d);
+}

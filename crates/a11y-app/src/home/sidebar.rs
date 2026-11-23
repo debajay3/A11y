@@ -10,7 +10,15 @@ use egui::{Align2, Id, Pos2, Rect, Response, Sense, Ui, Vec2};
 const ROW_H: f32 = 30.0;
 const INDENT: f32 = 16.0;
 
-pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>, workspace: Option<&a11y_library::organizations::Workspace>, profile: Option<&str>) {
+pub fn show(
+    h: &mut Home,
+    ui: &mut Ui,
+    rect: Rect,
+    acts: &mut Vec<Act>,
+    workspace: Option<&a11y_library::organizations::Workspace>,
+    profile: Option<&str>,
+    admin: bool,
+) {
     let p = ui.painter().clone();
     p.rect_filled(rect, 0.0, theme::BG);
     widgets::vline(&p, rect.right() - theme::BORDER_WIDTH, rect.top(), rect.bottom(), theme::BORDER);
@@ -20,7 +28,7 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>, workspac
 
     if let Some(name) = profile {
         let profile_rect = Rect::from_min_size(Pos2::new(x0 + 12.0, y + 8.0), Vec2::new(w - 24.0, 40.0));
-        crate::desktop::profile::show(ui, profile_rect, name, &mut h.profile_menu, acts);
+        crate::desktop::profile::show(ui, profile_rect, name, &mut h.profile_menu, acts, admin);
     } else {
         icons::paint(&p, Icon::Logo, Pos2::new(x0 + 28.0, y + 28.0), 24.0, theme::ICON);
         p.text(Pos2::new(x0 + 48.0, y + 28.0), Align2::LEFT_CENTER, crate::theme::display_title(), theme::font_large_strong(), theme::TEXT);

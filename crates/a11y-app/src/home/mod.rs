@@ -248,6 +248,7 @@ pub enum Act {
     Mcp,
     EditProfile,
     SignOut,
+    Admin,
     NewOrganization,
     SwitchOrganization(Option<String>),
     NewProject,
@@ -283,7 +284,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     h.drop_rects.clear();
     let mut acts = Vec::new();
     let profile = cfg!(feature = "enhanced-desktop").then(|| app.author());
-    sidebar::show(&mut h, ui, side, &mut acts, app.organizations.as_ref(), profile.as_deref());
+    sidebar::show(&mut h, ui, side, &mut acts, app.organizations.as_ref(), profile.as_deref(), app.accounts.session.as_ref().is_some_and(|s| s.user.admin));
     let organization = app.organizations.as_ref().map(|workspace| {
         workspace.organizations().iter().find(|org| Some(org.id.as_str()) == workspace.active()).map_or("Local workspace", |org| org.name.as_str())
     });
@@ -494,6 +495,9 @@ pub fn apply(app: &mut App, act: Act) {
             }
         }
         Act::EditProfile => app.ask_author_name(),
+        Act::Admin => {
+            app.accounts.admin_open = true;
+        }
         Act::SignOut => app.sign_out_workspace(),
         Act::NewOrganization => app.dialog = Some(Dialog::prompt(Intent::NewOrganization, "New organization", "", "Create")),
         Act::SwitchOrganization(id) => {

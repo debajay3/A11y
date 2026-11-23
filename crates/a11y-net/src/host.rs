@@ -35,10 +35,19 @@ pub fn generate_secret_key() -> [u8; 32] {
     iroh::SecretKey::generate().to_bytes()
 }
 
+/// Validates a managed session before any document data is sent.
+#[derive(Clone)]
+pub struct CredentialCheck(pub Arc<dyn Fn(&str) -> bool + Send + Sync>);
+impl std::fmt::Debug for CredentialCheck {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CredentialCheck(<redacted>)")
+    }
+}
 #[derive(Clone, Debug)]
 pub struct HostOptions {
     /// Required from guests when set.
     pub password: Option<String>,
+    pub credential_check: Option<CredentialCheck>,
     /// Ask the app (via [`HostEvent::JoinRequest`]) before letting each guest in.
     pub require_approval: bool,
     pub network: Network,
@@ -55,7 +64,16 @@ pub struct HostOptions {
 
 impl Default for HostOptions {
     fn default() -> Self {
-        Self { password: None, require_approval: false, network: Network::Internet, max_peers: 32, version: PROTOCOL_VERSION, secret_key: None, port: None }
+        Self {
+            credential_check: None,
+            password: None,
+            require_approval: false,
+            network: Network::Internet,
+            max_peers: 32,
+            version: PROTOCOL_VERSION,
+            secret_key: None,
+            port: None,
+        }
     }
 }
 
@@ -112,6 +130,8 @@ struct Inner {
     trusted: Mutex<HashSet<String>>,
     /// The `resume` secret each connected guest presented, until the app picks it up.
     presented: Mutex<HashMap<PeerId, String>>,
+    credentials: Mutex<HashMap<PeerId, String>>,
+    resume_credentials: Mutex<HashMap<String, String>>,
     limiter: Mutex<Limiter>,
     endpoint: OnceLock<Endpoint>,
     stop: watch::Sender<bool>,
@@ -147,6 +167,8 @@ impl Host {
             pending: Mutex::new(HashMap::new()),
             trusted: Mutex::new(HashSet::new()),
             presented: Mutex::new(HashMap::new()),
+            credentials: Mutex::new(HashMap::new()),
+            resume_credentials: Mutex::new(HashMap::new()),
             endpoint: OnceLock::new(),
             stop,
         });
@@ -218,6 +240,13 @@ impl Host {
 
     /// The `resume` secret `peer` presented when it joined, if any. Ask right after
     /// [`HostEvent::PeerJoined`]; it is handed out once.
+    pub fn bind_resume(&self, resume: &str, credential: &str) {
+        self.inner.resume_credentials.lock().unwrap().insert(resume.into(), credential.into());
+    }
+    pub fn credential(&self, peer: PeerId) -> Option<String> {
+        self.inner.credentials.lock().unwrap().get(&peer).cloned()
+    }
+
     pub fn join_token(&self, peer: PeerId) -> Option<String> {
         self.inner.presented.lock().unwrap().remove(&peer)
     }
@@ -296,7 +325,7 @@ fn send_datagram(conn: &Connection, bytes: &[u8]) -> Result<(), NetError> {
 impl Inner {
     fn ticket(&self) -> Option<Ticket> {
         let ep = self.endpoint.get()?;
-        Some(Ticket { addr: ep.addr(), password_required: self.opts.password.is_some() })
+        Some(Ticket { addr: ep.addr(), password_required: self.opts.password.is_some() || self.opts.credential_check.is_some() })
     }
 
     fn send_one(&self, peer: PeerId, bytes: Arc<Vec<u8>>) -> Result<(), NetError> {
@@ -358,7 +387,10 @@ async fn handle_incoming(inner: Arc<Inner>, incoming: iroh::endpoint::Incoming) 
         conn.close(CLOSE_REFUSED.into(), b"handshake failed");
         return;
     };
-    let Joined { peer, name, mut rx, tx, resume } = joined;
+    let Joined { peer, name, mut rx, tx, resume, credential } = joined;
+    if let Some(c) = credential {
+        inner.credentials.lock().unwrap().insert(peer, c);
+    }
 
     let (qtx, mut qrx) = mpsc::channel::<Arc<Vec<u8>>>(QUEUE);
     if let Some(t) = resume {
@@ -405,6 +437,7 @@ async fn handle_incoming(inner: Arc<Inner>, incoming: iroh::endpoint::Incoming) 
     datagrams.abort();
     inner.peers.lock().unwrap().remove(&peer);
     inner.presented.lock().unwrap().remove(&peer);
+    inner.credentials.lock().unwrap().remove(&peer);
     conn.close(CLOSE_LEFT.into(), b"bye");
     inner.events.emit(HostEvent::PeerLeft { peer });
 }
@@ -415,6 +448,7 @@ struct Joined {
     rx: iroh::endpoint::RecvStream,
     tx: iroh::endpoint::SendStream,
     resume: Option<String>,
+    credential: Option<String>,
 }
 
 /// Run the handshake. On `Err` the guest was refused (and told) or vanished.
@@ -431,6 +465,15 @@ async fn handshake(inner: &Arc<Inner>, conn: &Connection, remote: EndpointId) ->
     let locked = inner.limiter.lock().unwrap().check(&remote);
     if let Err(left) = locked {
         return refuse(inner, conn, tx, name, remote, JoinError::Locked { retry_secs: left.as_secs() + 1 }).await;
+    }
+    if let Some(check) = &inner.opts.credential_check {
+        if !(check.0)(hello.password.as_deref().unwrap_or("")) {
+            return refuse(inner, conn, tx, name, remote, JoinError::Denied).await;
+        }
+        // Managed sessions cannot reuse another account's collaboration resume identity.
+        if hello.resume.as_ref().is_some_and(|r| inner.resume_credentials.lock().unwrap().get(r) != hello.password.as_ref()) {
+            return refuse(inner, conn, tx, name, remote, JoinError::Denied).await;
+        }
     }
     if let Some(pw) = &inner.opts.password {
         if !ct_eq(pw, hello.password.as_deref().unwrap_or("")) {
@@ -464,7 +507,7 @@ async fn handshake(inner: &Arc<Inner>, conn: &Connection, remote: EndpointId) ->
     let reply = serde_json::to_vec(&Reply::Welcome { peer }).map_err(|_| ())?;
     let wire = frame::encode(&reply).map_err(|_| ())?;
     frame::write_wire(&mut tx, &wire).await.map_err(|_| ())?;
-    Ok(Joined { peer, name, rx, tx, resume: hello.resume })
+    Ok(Joined { peer, name, rx, tx, resume: hello.resume, credential: inner.opts.credential_check.as_ref().and(hello.password) })
 }
 
 /// Tell the guest why, record it, and wait for the guest to hang up.
