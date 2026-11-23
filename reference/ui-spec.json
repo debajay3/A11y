@@ -816,7 +816,7 @@
         "radius": 5,
         "icon": "collapse arrows (exit full view)"
       },
-      "_no_share": "Figma shows Share here; desigma has no sharing, omit it and keep spacing balanced"
+      "_no_share": "Figma shows Share here; a11y has no sharing, omit it and keep spacing balanced"
     },
     "table": {
       "x": 298,

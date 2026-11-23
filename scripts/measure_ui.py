@@ -2,9 +2,9 @@
 """Pixel-fidelity harness for menus and the no-selection inspector.
 
 Screenshots the debug app in matching states, crops the same regions out of the
-Figma reference captures and ours, and runs `desigma-diff compare` on each pair.
+Figma reference captures and ours, and runs `a11y-diff compare` on each pair.
 
-    cargo build -p desigma-app -p desigma-diff
+    cargo build -p a11y-app -p a11y-diff
     python scripts/measure_ui.py [--refs DIR] [--tolerance 8] [--keep]
 
 The references (gitignored) default to <repo>/reference/screens, falling back to the main
@@ -19,8 +19,8 @@ import sys
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXE = os.path.join(ROOT, "target", "debug", "desigma.exe" if os.name == "nt" else "desigma")
-DIFF = os.path.join(ROOT, "target", "debug", "desigma-diff.exe" if os.name == "nt" else "desigma-diff")
+EXE = os.path.join(ROOT, "target", "debug", "a11y.exe" if os.name == "nt" else "a11y")
+DIFF = os.path.join(ROOT, "target", "debug", "a11y-diff.exe" if os.name == "nt" else "a11y-diff")
 
 # name -> (reference file, our CLI args, crop rect x,y,w,h)
 CASES = {

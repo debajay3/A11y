@@ -1,0 +1,26 @@
+[package]
+name = "a11y-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["server"]
+server = ["dep:rmcp", "dep:tokio"]
+
+[dependencies]
+a11y-doc.workspace = true
+a11y-export.workspace = true
+a11y-svg.workspace = true
+a11y-library.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rmcp = { version = "=3.5.1", default-features = false, features = ["server", "transport-io"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"], optional = true }
+
+[dev-dependencies]
+rmcp = { version = "=3.5.1", default-features = false, features = ["client", "transport-child-process"] }
+
+[[bin]]
+name = "a11y-mcp"
+required-features = ["server"]

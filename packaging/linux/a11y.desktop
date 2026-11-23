@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=A11y
+GenericName=Design editor
+Comment=Free, open-source Figma-style design editor
+Exec=a11y %U
+Icon=a11y
+Terminal=false
+Categories=Graphics;VectorGraphics;Design;
+MimeType=application/x-a11y;application/x-figma-design;x-scheme-handler/a11y;
+Keywords=design;vector;figma;prototype;
+StartupWMClass=a11y

@@ -54,22 +54,22 @@ jobs:
         shell: bash
         run: |
           if [ "${GITHUB_REF_TYPE}" = tag ]; then
-            echo "DESIGMA_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "A11Y_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
             echo "version=0.0.0-dev.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
-      # On Windows, crates/desigma-app/build.rs embeds the icon and version info
+      # On Windows, crates/a11y-app/build.rs embeds the icon and version info
       # (rc.exe ships with the runner's Windows SDK); it fails the build under CI
       # if that step breaks, so an icon-less exe is never released.
-      - name: Build desigma, desigma-diff and desigma-mcp
-        run: cargo build --release --locked --target ${{ matrix.target }} -p desigma-app -p desigma-diff -p desigma-mcp
+      - name: Build a11y, a11y-diff and a11y-mcp
+        run: cargo build --release --locked --target ${{ matrix.target }} -p a11y-app -p a11y-diff -p a11y-mcp
 
       - name: Check the stamped version
         if: github.ref_type == 'tag'
         shell: bash
-        run: test "$(target/${{ matrix.target }}/release/desigma --version)" = "desigma ${DESIGMA_VERSION}"
+        run: test "$(target/${{ matrix.target }}/release/a11y --version)" = "a11y ${A11Y_VERSION}"
 
       - name: Package
         shell: bash
@@ -93,7 +93,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: desigma-${{ matrix.target }}
+          name: a11y-${{ matrix.target }}
           path: |
             dist/*.zip
             dist/*.tar.gz
@@ -101,7 +101,7 @@ jobs:
             dist/*.sha256
           if-no-files-found: error
 
-  # One job builds both Apple architectures and packages a universal desigma.app
+  # One job builds both Apple architectures and packages a universal a11y.app
   # (.dmg for people, .tar.gz for scripts). macos-13 runners are retired, so the
   # Intel half is cross-compiled on the arm64 runner.
   macos:
@@ -123,7 +123,7 @@ jobs:
         id: version
         run: |
           if [ "${GITHUB_REF_TYPE}" = tag ]; then
-            echo "DESIGMA_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "A11Y_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
             echo "version=0.0.0-dev.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
@@ -132,19 +132,19 @@ jobs:
       - name: Build both architectures
         run: |
           for t in aarch64-apple-darwin x86_64-apple-darwin; do
-            cargo build --release --locked --target "$t" -p desigma-app -p desigma-diff -p desigma-mcp
+            cargo build --release --locked --target "$t" -p a11y-app -p a11y-diff -p a11y-mcp
           done
 
       - name: Check the stamped version
         if: github.ref_type == 'tag'
-        run: test "$(target/aarch64-apple-darwin/release/desigma --version)" = "desigma ${DESIGMA_VERSION}"
+        run: test "$(target/aarch64-apple-darwin/release/a11y --version)" = "a11y ${A11Y_VERSION}"
 
-      - name: Package desigma.app (.dmg and .tar.gz)
+      - name: Package a11y.app (.dmg and .tar.gz)
         run: scripts/package-macos.sh "${{ steps.version.outputs.version }}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: desigma-macos-universal
+          name: a11y-macos-universal
           path: |
             dist/*.dmg
             dist/*.tar.gz
@@ -181,12 +181,12 @@ jobs:
 
             Download the file for your platform below. These builds are **not code-signed yet**, so the first launch shows a warning:
 
-            - **macOS (Apple Silicon and Intel):** download `desigma-<version>-macos.dmg`, open it and drag **desigma** to **Applications**. The first time, open it from Applications, then go to **System Settings → Privacy & Security** and click **Open Anyway**. Or run `xattr -dr com.apple.quarantine /Applications/desigma.app`.
-            - **Windows (recommended):** run `desigma-<version>-x86_64-windows-setup.exe`. It installs for your user without an admin prompt, adds a Start Menu entry and can associate `.desigma` files. In the SmartScreen dialog, click **More info → Run anyway**.
-            - **Windows (portable):** unzip `desigma-<version>-x86_64-pc-windows-msvc.zip` and run `desigma.exe`; same SmartScreen steps.
-            - **Linux:** unpack `desigma-<version>-x86_64-unknown-linux-gnu.tar.gz`, then run `./install.sh` (no sudo) or just `./desigma`.
+            - **macOS (Apple Silicon and Intel):** download `a11y-<version>-macos.dmg`, open it and drag **a11y** to **Applications**. The first time, open it from Applications, then go to **System Settings → Privacy & Security** and click **Open Anyway**. Or run `xattr -dr com.apple.quarantine /Applications/a11y.app`.
+            - **Windows (recommended):** run `a11y-<version>-x86_64-windows-setup.exe`. It installs for your user without an admin prompt, adds a Start Menu entry and can associate `.a11y` files. In the SmartScreen dialog, click **More info → Run anyway**.
+            - **Windows (portable):** unzip `a11y-<version>-x86_64-pc-windows-msvc.zip` and run `a11y.exe`; same SmartScreen steps.
+            - **Linux:** unpack `a11y-<version>-x86_64-unknown-linux-gnu.tar.gz`, then run `./install.sh` (no sudo) or just `./a11y`.
 
-            Full instructions: [docs/install.md](https://github.com/deepfounder-ai/desigma/blob/main/docs/install.md). Check downloads against `SHA256SUMS`.
+            Full instructions: [docs/install.md](https://github.com/debajay3/A11y/blob/main/docs/install.md). Check downloads against `SHA256SUMS`.
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/*.zip

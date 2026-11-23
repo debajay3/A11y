@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-a11y">
+    <comment>a11y document</comment>
+    <glob pattern="*.a11y"/>
+  </mime-type>
+  <mime-type type="application/x-figma-design">
+    <comment>Figma design file</comment>
+    <glob pattern="*.fig"/>
+  </mime-type>
+</mime-info>

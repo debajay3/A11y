@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Package desigma for macOS: one universal (arm64 + x86_64) desigma.app, shipped as a .dmg and a .tar.gz.
+# Package a11y for macOS: one universal (arm64 + x86_64) a11y.app, shipped as a .dmg and a .tar.gz.
 #
 #   scripts/package-macos.sh <version> [arm64-bin-dir] [x86_64-bin-dir]
 #
-# Run on macOS (needs lipo, codesign, hdiutil; iconutil is used when present). Expects `desigma`,
-# `desigma-diff` and `desigma-mcp` already built in release mode for both targets. The bin dirs default to
+# Run on macOS (needs lipo, codesign, hdiutil; iconutil is used when present). Expects `a11y`,
+# `a11y-diff` and `a11y-mcp` already built in release mode for both targets. The bin dirs default to
 # target/aarch64-apple-darwin/release and target/x86_64-apple-darwin/release. Writes into dist/:
-#   desigma-<version>-macos.dmg              drag-to-Applications disk image (the main download)
-#   desigma-<version>-macos-universal.tar.gz desigma.app + licenses + README, for scripting
+#   a11y-<version>-macos.dmg              drag-to-Applications disk image (the main download)
+#   a11y-<version>-macos-universal.tar.gz a11y.app + licenses + README, for scripting
 #   <file>.sha256                            checksum lines (CI merges them into SHA256SUMS)
 #
 # The app is ad-hoc signed (`codesign --sign -`). That is not a Developer ID signature, so Gatekeeper
 # still asks the user to confirm once (Open Anyway), but Apple Silicon no longer reports the app as
-# "damaged". Bundle identifier: ai.deepfounder.desigma.
+# "damaged". Bundle identifier: com.debajay3.a11y.
 set -euo pipefail
 
 version=${1:?usage: package-macos.sh <version> [arm64-bin-dir] [x86_64-bin-dir]}
@@ -32,11 +32,11 @@ short_version=$version
 bundle_version=${version%%[-+]*}
 
 # 1. Universal binaries.
-app=$work/stage/desigma.app
+app=$work/stage/a11y.app
 macos_dir=$app/Contents/MacOS
 res_dir=$app/Contents/Resources
 mkdir -p "$macos_dir" "$res_dir"
-for bin in desigma desigma-diff desigma-mcp; do
+for bin in a11y a11y-diff a11y-mcp; do
   for d in "$arm_dir" "$x64_dir"; do
     [ -f "$d/$bin" ] || { echo "package-macos.sh: missing $d/$bin" >&2; exit 1; }
   done
@@ -46,12 +46,12 @@ for bin in desigma desigma-diff desigma-mcp; do
 done
 
 # 2. Icon: build the .icns from the committed iconset; fall back to the committed .icns.
-iconset=$root/assets/icon/desigma.iconset
+iconset=$root/assets/icon/a11y.iconset
 if command -v iconutil >/dev/null 2>&1; then
-  iconutil -c icns -o "$res_dir/desigma.icns" "$iconset"
+  iconutil -c icns -o "$res_dir/a11y.icns" "$iconset"
 else
-  echo "package-macos.sh: iconutil not found, using the committed assets/icon/desigma.icns" >&2
-  cp "$root/assets/icon/desigma.icns" "$res_dir/desigma.icns"
+  echo "package-macos.sh: iconutil not found, using the committed assets/icon/a11y.icns" >&2
+  cp "$root/assets/icon/a11y.icns" "$res_dir/a11y.icns"
 fi
 
 # 3. Info.plist from the template.
@@ -64,12 +64,12 @@ printf 'APPL????' > "$app/Contents/PkgInfo"
 
 # Keep embedded asset notices inside the app, including when installed from the DMG.
 mkdir -p "$res_dir/licenses"
-cp "$root/crates/desigma-fonts/assets/inter/OFL.txt" "$res_dir/licenses/Inter-OFL.txt"
-cp "$root/crates/desigma-app/assets/icons/lucide/LICENSE" "$res_dir/licenses/Lucide-LICENSE.txt"
+cp "$root/crates/a11y-fonts/assets/inter/OFL.txt" "$res_dir/licenses/Inter-OFL.txt"
+cp "$root/crates/a11y-app/assets/icons/lucide/LICENSE" "$res_dir/licenses/Lucide-LICENSE.txt"
 
 # 4. Ad-hoc sign. Sign the helper tool first, then the bundle.
-codesign --force --sign - "$macos_dir/desigma-diff"
-codesign --force --sign - "$macos_dir/desigma-mcp"
+codesign --force --sign - "$macos_dir/a11y-diff"
+codesign --force --sign - "$macos_dir/a11y-mcp"
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 
@@ -77,11 +77,11 @@ codesign --verify --deep --strict --verbose=2 "$app"
 stage=$work/stage
 ln -s /Applications "$stage/Applications"
 cp "$root/packaging/macos/Read me first.txt" "$stage/Read me first.txt"
-dmg=$dist/desigma-$version-macos.dmg
+dmg=$dist/a11y-$version-macos.dmg
 rm -f "$dmg"
 # hdiutil occasionally fails with "Resource busy" on CI runners; retry a few times.
 for attempt in 1 2 3; do
-  if hdiutil create -volname desigma -srcfolder "$stage" -ov -format UDZO "$dmg"; then
+  if hdiutil create -volname a11y -srcfolder "$stage" -ov -format UDZO "$dmg"; then
     break
   fi
   [ "$attempt" = 3 ] && { echo "package-macos.sh: hdiutil failed" >&2; exit 1; }
@@ -89,10 +89,10 @@ for attempt in 1 2 3; do
 done
 
 # 6. Universal tar.gz for CLI and scripting use.
-name=desigma-$version-macos-universal
+name=a11y-$version-macos-universal
 tar_stage=$work/$name
 mkdir -p "$tar_stage"
-cp -R "$app" "$tar_stage/desigma.app"
+cp -R "$app" "$tar_stage/a11y.app"
 cp LICENSE-MIT LICENSE-APACHE README.md "$tar_stage/"
 tarball=$dist/$name.tar.gz
 rm -f "$tarball"

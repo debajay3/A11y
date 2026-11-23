@@ -1,44 +1,44 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/desigma-doc",
-    "crates/desigma-engine",
-    "crates/desigma-render",
-    "crates/desigma-fonts",
-    "crates/desigma-fig",
-    "crates/desigma-library",
-    "crates/desigma-app",
-    "crates/desigma-diff",
-    "crates/desigma-export",
-    "crates/desigma-svg",
-    "crates/desigma-pen",
-    "crates/desigma-gpu",
-    "crates/desigma-mcp",
-    "crates/desigma-net",
-    "crates/desigma-collab",
-    "crates/desigma-server",
+    "crates/a11y-doc",
+    "crates/a11y-engine",
+    "crates/a11y-render",
+    "crates/a11y-fonts",
+    "crates/a11y-fig",
+    "crates/a11y-library",
+    "crates/a11y-app",
+    "crates/a11y-diff",
+    "crates/a11y-export",
+    "crates/a11y-svg",
+    "crates/a11y-pen",
+    "crates/a11y-gpu",
+    "crates/a11y-mcp",
+    "crates/a11y-net",
+    "crates/a11y-collab",
+    "crates/a11y-server",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/deepfounder-ai/desigma"
+repository = "https://github.com/debajay3/A11y"
 
 [workspace.dependencies]
-desigma-engine = { path = "crates/desigma-engine" }
-desigma-doc = { path = "crates/desigma-doc" }
-desigma-collab = { path = "crates/desigma-collab" }
-desigma-render = { path = "crates/desigma-render" }
-desigma-fig = { path = "crates/desigma-fig" }
-desigma-library = { path = "crates/desigma-library" }
-desigma-fonts = { path = "crates/desigma-fonts" }
-desigma-export = { path = "crates/desigma-export" }
-desigma-svg = { path = "crates/desigma-svg" }
-desigma-pen = { path = "crates/desigma-pen" }
-desigma-gpu = { path = "crates/desigma-gpu" }
-desigma-mcp = { path = "crates/desigma-mcp", default-features = false }
-desigma-net = { path = "crates/desigma-net" }
+a11y-engine = { path = "crates/a11y-engine" }
+a11y-doc = { path = "crates/a11y-doc" }
+a11y-collab = { path = "crates/a11y-collab" }
+a11y-render = { path = "crates/a11y-render" }
+a11y-fig = { path = "crates/a11y-fig" }
+a11y-library = { path = "crates/a11y-library" }
+a11y-fonts = { path = "crates/a11y-fonts" }
+a11y-export = { path = "crates/a11y-export" }
+a11y-svg = { path = "crates/a11y-svg" }
+a11y-pen = { path = "crates/a11y-pen" }
+a11y-gpu = { path = "crates/a11y-gpu" }
+a11y-mcp = { path = "crates/a11y-mcp", default-features = false }
+a11y-net = { path = "crates/a11y-net" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

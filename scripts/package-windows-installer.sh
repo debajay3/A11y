@@ -3,10 +3,10 @@
 #
 #   scripts/package-windows-installer.sh <version> [bin-dir]
 #
-# Expects desigma.exe, desigma-diff.exe and desigma-mcp.exe built in release mode (bin-dir defaults to
+# Expects a11y.exe, a11y-diff.exe and a11y-mcp.exe built in release mode (bin-dir defaults to
 # target/x86_64-pc-windows-msvc/release, then target/release). Needs `iscc` (Inno Setup 6) on PATH
 # or installed in a default location. Writes into dist/:
-#   desigma-<version>-x86_64-windows-setup.exe
+#   a11y-<version>-x86_64-windows-setup.exe
 #   <that file>.sha256     (CI merges these into SHA256SUMS)
 # The installer's file version must be numeric, so 0.1.0-alpha.9 becomes 0.1.0.9 (the full string
 # stays the displayed AppVersion); a non-numeric suffix such as 0.0.0-dev.abc1234 becomes 0.0.0.0.
@@ -37,9 +37,9 @@ root=$(pwd)
 bin_win=$(cd "$bin_dir" && { pwd -W 2>/dev/null || pwd; })
 mkdir -p dist
 # MSYS_NO_PATHCONV stops Git Bash from rewriting the /D switches into paths.
-MSYS_NO_PATHCONV=1 "$iscc" "/DAppVersion=$version" "/DNumericVersion=$numeric" "/DBinDir=$bin_win" /Q "$(cygpath -w "$root/scripts/windows/desigma.iss")"
+MSYS_NO_PATHCONV=1 "$iscc" "/DAppVersion=$version" "/DNumericVersion=$numeric" "/DBinDir=$bin_win" /Q "$(cygpath -w "$root/scripts/windows/a11y.iss")"
 
-out=desigma-$version-x86_64-windows-setup.exe
+out=a11y-$version-x86_64-windows-setup.exe
 cd "$root/dist"
 if command -v sha256sum >/dev/null 2>&1; then sha256sum "$out" > "$out.sha256"; else shasum -a 256 "$out" > "$out.sha256"; fi
 echo "packaged dist/$out (file version $numeric)"

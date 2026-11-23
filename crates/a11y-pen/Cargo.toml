@@ -1,0 +1,17 @@
+[package]
+name = "a11y-pen"
+description = "Pencil (.pen) file import for a11y: maps the JSON object tree onto a11y nodes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+a11y-doc.workspace = true
+a11y-engine.workspace = true
+a11y-fig.workspace = true
+image = { workspace = true, features = ["jpeg", "gif", "webp"] }
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+a11y-render.workspace = true

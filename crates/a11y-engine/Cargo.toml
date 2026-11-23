@@ -1,0 +1,10 @@
+[package]
+name = "a11y-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+a11y-doc.workspace = true
+a11y-render.workspace = true
+unicode-segmentation = "1"

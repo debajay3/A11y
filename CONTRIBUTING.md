@@ -1,8 +1,8 @@
-# Contributing to desigma
+# Contributing to a11y
 
-Thanks for helping. desigma is an independent, local-first design editor built in Rust. The goals are faithful document rendering, Figma file compatibility and a fast editing experience with a small, readable codebase.
+Thanks for helping. a11y is an independent, local-first design editor built in Rust. The goals are faithful document rendering, Figma file compatibility and a fast editing experience with a small, readable codebase.
 
-Develop Desigma's own visual hierarchy, panels, controls and icons. Familiar design-tool workflows and shortcuts are useful, but reproducing Figma's editor appearance is not an acceptance criterion. Document rendering fidelity and editor UI design have separate reference targets.
+Develop A11y's own visual hierarchy, panels, controls and icons. Familiar design-tool workflows and shortcuts are useful, but reproducing Figma's editor appearance is not an acceptance criterion. Document rendering fidelity and editor UI design have separate reference targets.
 
 ## Build and run
 
@@ -14,11 +14,11 @@ sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev libx11-dev \
 ```
 
 ```sh
-cargo run --release -p desigma-app               # editor with the demo document
-cargo run --release -p desigma-app -- file.fig   # open a Figma file
+cargo run --release -p a11y-app               # editor with the demo document
+cargo run --release -p a11y-app -- file.fig   # open a Figma file
 ```
 
-Dev builds compile dependencies with `opt-level = 2` (see the root `Cargo.toml`), so `cargo run -p desigma-app` is usable too.
+Dev builds compile dependencies with `opt-level = 2` (see the root `Cargo.toml`), so `cargo run -p a11y-app` is usable too.
 
 ## Test and lint
 
@@ -39,18 +39,18 @@ Rustfmt settings live in `rustfmt.toml`. The tree was written before it, so `car
 The app renders one frame headlessly, which is how UI changes are checked:
 
 ```sh
-desigma --screenshot out.png --size 1600x1000 --select Card
-desigma --tab prototype --present --screenshot present.png
+a11y --screenshot out.png --size 1600x1000 --select Card
+a11y --tab prototype --present --screenshot present.png
 ```
 
-Compare against a reference with the `desigma-diff` CLI (exit code 1 when the mismatch exceeds the threshold, 2 on errors):
+Compare against a reference with the `a11y-diff` CLI (exit code 1 when the mismatch exceeds the threshold, 2 on errors):
 
 ```sh
-desigma-diff compare reference.png out.png --out diff.png --tolerance 2 --threshold 0.001
-desigma-diff suite path/to/manifest.json          # run many cases, writes an HTML report
+a11y-diff compare reference.png out.png --out diff.png --tolerance 2 --threshold 0.001
+a11y-diff suite path/to/manifest.json          # run many cases, writes an HTML report
 ```
 
-Anti-aliased edge pixels are forgiven by default (`--no-aa` turns that off). Use `--ignore x,y,w,h` to mask regions such as a clock or cursor. For document fidelity, compare canvas-only output from permitted test documents at matching zoom, dimensions and font settings; record any expected rendering differences. For editor changes, use approved Desigma screenshots as the regression baseline. Historical captures of Figma's own UI under `reference/screens/` are local-only and git-ignored; do not commit them or use them as an editor acceptance target. Screenshots for the README go in `docs/images/`.
+Anti-aliased edge pixels are forgiven by default (`--no-aa` turns that off). Use `--ignore x,y,w,h` to mask regions such as a clock or cursor. For document fidelity, compare canvas-only output from permitted test documents at matching zoom, dimensions and font settings; record any expected rendering differences. For editor changes, use approved A11y screenshots as the regression baseline. Historical captures of Figma's own UI under `reference/screens/` are local-only and git-ignored; do not commit them or use them as an editor acceptance target. Screenshots for the README go in `docs/images/`.
 
 Use test documents and third-party assets whose licenses permit the intended use and distribution, and preserve required attribution. Independent implementation and visual differences do not establish legal clearance.
 
@@ -58,14 +58,14 @@ Use test documents and third-party assets whose licenses permit the intended use
 
 | Crate | Role |
 |---|---|
-| `desigma-doc` | Scene graph, paints, text, auto layout, components, variables, prototype model, undo/redo. Pure data, no UI. |
-| `desigma-render` | Deterministic CPU renderer (tiny-skia), spatial index, tile cache. |
-| `desigma-fig` | Figma REST JSON and `.fig` import, REST JSON export. |
-| `desigma-pen` | Pencil `.pen` import. |
-| `desigma-fonts` | Bundled Inter, Fontsource fetch and cache, font substitution. |
-| `desigma-export` | PNG, JPG, SVG export and Dev mode CSS. |
-| `desigma-app` | The egui desktop editor (binary `desigma`). |
-| `desigma-diff` | Pixel-diff library and the `desigma-diff` CLI. |
+| `a11y-doc` | Scene graph, paints, text, auto layout, components, variables, prototype model, undo/redo. Pure data, no UI. |
+| `a11y-render` | Deterministic CPU renderer (tiny-skia), spatial index, tile cache. |
+| `a11y-fig` | Figma REST JSON and `.fig` import, REST JSON export. |
+| `a11y-pen` | Pencil `.pen` import. |
+| `a11y-fonts` | Bundled Inter, Fontsource fetch and cache, font substitution. |
+| `a11y-export` | PNG, JPG, SVG export and Dev mode CSS. |
+| `a11y-app` | The egui desktop editor (binary `a11y`). |
+| `a11y-diff` | Pixel-diff library and the `a11y-diff` CLI. |
 
 Dependencies flow downward: `app` depends on everything, `doc` depends on nothing in the workspace. Keep UI code out of the lower crates, and make document edits go through undoable `Command`s.
 

@@ -1383,24 +1383,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-app"
+name = "a11y-app"
 version = "0.1.0"
 dependencies = [
  "arboard",
  "cosmic-text",
- "desigma-collab",
- "desigma-doc",
- "desigma-engine",
- "desigma-export",
- "desigma-fig",
- "desigma-fonts",
- "desigma-gpu",
- "desigma-library",
- "desigma-mcp",
- "desigma-net",
- "desigma-pen",
- "desigma-render",
- "desigma-svg",
+ "a11y-collab",
+ "a11y-doc",
+ "a11y-engine",
+ "a11y-export",
+ "a11y-fig",
+ "a11y-fonts",
+ "a11y-gpu",
+ "a11y-library",
+ "a11y-mcp",
+ "a11y-net",
+ "a11y-pen",
+ "a11y-render",
+ "a11y-svg",
  "dirs",
  "eframe",
  "egui",
@@ -1426,11 +1426,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-collab"
+name = "a11y-collab"
 version = "0.1.0"
 dependencies = [
  "data-encoding",
- "desigma-doc",
+ "a11y-doc",
  "serde",
  "serde_json",
  "sha2",
@@ -1438,7 +1438,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-diff"
+name = "a11y-diff"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -1448,7 +1448,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-doc"
+name = "a11y-doc"
 version = "0.1.0"
 dependencies = [
  "regex",
@@ -1458,22 +1458,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-engine"
+name = "a11y-engine"
 version = "0.1.0"
 dependencies = [
- "desigma-doc",
- "desigma-render",
+ "a11y-doc",
+ "a11y-render",
  "unicode-segmentation",
 ]
 
 [[package]]
-name = "desigma-export"
+name = "a11y-export"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "color_quant",
- "desigma-doc",
- "desigma-render",
+ "a11y-doc",
+ "a11y-render",
  "flate2",
  "gif",
  "image",
@@ -1482,11 +1482,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-fig"
+name = "a11y-fig"
 version = "0.1.0"
 dependencies = [
- "desigma-doc",
- "desigma-render",
+ "a11y-doc",
+ "a11y-render",
  "flate2",
  "ruzstd",
  "serde",
@@ -1497,10 +1497,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-fonts"
+name = "a11y-fonts"
 version = "0.1.0"
 dependencies = [
- "desigma-doc",
+ "a11y-doc",
  "dirs",
  "serde",
  "serde_json",
@@ -1509,13 +1509,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-gpu"
+name = "a11y-gpu"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "desigma-diff",
- "desigma-doc",
- "desigma-render",
+ "a11y-diff",
+ "a11y-doc",
+ "a11y-render",
  "image",
  "lyon_tessellation",
  "pollster",
@@ -1523,13 +1523,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-library"
+name = "a11y-library"
 version = "0.1.0"
 dependencies = [
- "desigma-doc",
- "desigma-fig",
- "desigma-pen",
- "desigma-svg",
+ "a11y-doc",
+ "a11y-fig",
+ "a11y-pen",
+ "a11y-svg",
  "dirs",
  "serde",
  "serde_json",
@@ -1537,13 +1537,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-mcp"
+name = "a11y-mcp"
 version = "0.1.0"
 dependencies = [
- "desigma-doc",
- "desigma-export",
- "desigma-library",
- "desigma-svg",
+ "a11y-doc",
+ "a11y-export",
+ "a11y-library",
+ "a11y-svg",
  "rmcp",
  "serde",
  "serde_json",
@@ -1551,7 +1551,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-net"
+name = "a11y-net"
 version = "0.1.0"
 dependencies = [
  "bytes",
@@ -1566,25 +1566,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-pen"
+name = "a11y-pen"
 version = "0.1.0"
 dependencies = [
- "desigma-doc",
- "desigma-engine",
- "desigma-fig",
- "desigma-render",
+ "a11y-doc",
+ "a11y-engine",
+ "a11y-fig",
+ "a11y-render",
  "image",
  "serde_json",
  "thiserror 2.0.21",
 ]
 
 [[package]]
-name = "desigma-render"
+name = "a11y-render"
 version = "0.1.0"
 dependencies = [
  "cosmic-text",
- "desigma-doc",
- "desigma-fonts",
+ "a11y-doc",
+ "a11y-fonts",
  "i_overlay",
  "image",
  "rayon",
@@ -1593,13 +1593,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-server"
+name = "a11y-server"
 version = "0.1.0"
 dependencies = [
- "desigma-collab",
- "desigma-doc",
- "desigma-library",
- "desigma-net",
+ "a11y-collab",
+ "a11y-doc",
+ "a11y-library",
+ "a11y-net",
  "serde",
  "serde_json",
  "tiny_http",
@@ -1607,14 +1607,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "desigma-svg"
+name = "a11y-svg"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "desigma-doc",
- "desigma-export",
- "desigma-fonts",
- "desigma-render",
+ "a11y-doc",
+ "a11y-export",
+ "a11y-fonts",
+ "a11y-render",
  "image",
  "resvg",
  "roxmltree",

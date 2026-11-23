@@ -5,8 +5,8 @@ with no account and no server to run.
 
 ## How it works for users
 
-1. The host opens a file and clicks **Share**. Desigma shows a link
-   `desigma://join/<ticket>` and, optionally, a password. The host picks whether guests can
+1. The host opens a file and clicks **Share**. A11y shows a link
+   `a11y://join/<ticket>` and, optionally, a password. The host picks whether guests can
    edit or only view, and whether each joiner needs approval.
 2. A guest clicks the link (or pastes it into **Join session** on the home screen), enters a
    name and the password, and the file opens with everyone's cursors on it.
@@ -28,7 +28,7 @@ guest ─┘   (encrypted,   (orders every edit) └─ guest
 * **Transport: [iroh](https://github.com/n0-computer/iroh).** Pure Rust QUIC, dialled by public
   key, with NAT hole punching and public relays (over HTTPS) as fallback. The ticket in the link
   holds the host's endpoint id plus its addresses. No ports to open, no tunnel binary.
-  ALPN `desigma/collab/1`.
+  ALPN `a11y/collab/1`.
 * **Encoding.** JSON frames, length-prefixed, zstd for large ones. The document model uses
   `skip_serializing_if`, so it needs a self-describing format.
 
@@ -43,7 +43,7 @@ any frame where the document changed (and at most ~20 times a second), it diffs 
 shadow and turns the difference into **ops**. This also means other people see drags live, not
 just when the mouse is released.
 
-Ops (crate `desigma-collab`):
+Ops (crate `a11y-collab`):
 
 | Op | Meaning |
 |---|---|
@@ -157,11 +157,11 @@ The top bar gets an avatar row; clicking an avatar follows that person.
 ## Platforms
 
 iroh runs on Windows, macOS and Linux; the protocol is the same everywhere. The
-`desigma://` link handler is registered per OS: Inno Setup registry keys on Windows,
+`a11y://` link handler is registered per OS: Inno Setup registry keys on Windows,
 `CFBundleURLTypes` in `Info.plist` on macOS, `x-scheme-handler` in the `.desktop` file on Linux.
 Pasting the link always works as a fallback. See "Links and files reach the running editor" below.
 
-Every peer must speak the same protocol version. A mismatch is refused with "update desigma". Protocol 3 sends keyed collections per entry: `Op::DocEntry`, `Ack::entries` (the host's value of each
+Every peer must speak the same protocol version. A mismatch is refused with "update a11y". Protocol 3 sends keyed collections per entry: `Op::DocEntry`, `Ack::entries` (the host's value of each
 entry the batch wrote) and `Fix::Entries`.
 
 ## Limits of the first version
@@ -179,7 +179,7 @@ entry the batch wrote) and `Fix::Entries`.
 
 ## Phases
 
-1. **Core sync (`crates/desigma-collab`, no network).**
+1. **Core sync (`crates/a11y-collab`, no network).**
    * Ops, diff and apply.
    * Id ranges.
    * Host sequencer with structure validation.
@@ -188,7 +188,7 @@ entry the batch wrote) and `Fix::Entries`.
    * Snapshot.
    * In-process tests with simulated peers, including randomized "everyone edits at once" runs
      that must converge to identical documents.
-2. **Transport (`crates/desigma-net`).**
+2. **Transport (`crates/a11y-net`).**
    * iroh endpoint, ticket and link encoding, and the handshake (protocol version, password,
      name, approval).
    * Framed messages, peer join and leave events, broadcast.
@@ -198,30 +198,30 @@ entry the batch wrote) and `Fix::Entries`.
    * Share and Join dialogs and the session lifecycle.
    * Applying remote ops to `App::doc`, plus the shadow and diff loop.
    * Roles, kick and end session.
-   * The `desigma://` handler on all three OSes.
+   * The `a11y://` handler on all three OSes.
 4. **Presence (done).** Cursors, selections, avatars, Follow.
 5. **Polish.**
    * Reconnect after a dropped connection (done).
    * Font transfer (done).
    * Image cache (done).
    * Leave questions and a refreshed share link (done).
-   * A headless `desigma-server` that can host a file permanently (same protocol).
+   * A headless `a11y-server` that can host a file permanently (same protocol).
 
 ## Implementation notes (phases 3 and 4)
 
-Code: `crates/desigma-app/src/collab/` (`mod.rs` session and per-frame pump, `link.rs` transport traits and
-the desigma-net adapters, `presence.rs`, `ui.rs`, `draw.rs`, `tests.rs`).
+Code: `crates/a11y-app/src/collab/` (`mod.rs` session and per-frame pump, `link.rs` transport traits and
+the a11y-net adapters, `presence.rs`, `ui.rs`, `draw.rs`, `tests.rs`).
 
 * **Frame loop.** `collab::pump` runs in `Shell::logic` (also while the window is occluded). Drain the
   transport, hand guest messages to the sync core, number our own edits when the canvas revision changed
   (at most 20 Hz, flushed once idle), send presence, ease remote cursors, follow.
-* **Wire.** Reliable lane carries `ToGuest { Sync, Role, Images, Font }` and `ToHost { Sync, Fonts }` (`desigma_collab::wire`) as JSON;
-  desigma-net deflates big frames. The host fans out itself (per peer), so a joiner only gets messages after
+* **Wire.** Reliable lane carries `ToGuest { Sync, Role, Images, Font }` and `ToHost { Sync, Fonts }` (`a11y_collab::wire`) as JSON;
+  a11y-net deflates big frames. The host fans out itself (per peer), so a joiner only gets messages after
   its snapshot. Presence is a datagram of at most 1000 bytes (selection cut to fit); the host stamps the sender
   and relays it to the others, replays known presence to a newcomer, and sends `gone` when someone leaves.
   Silent people expire after 12 s; keepalives go out every 2 s.
-* **Transport traits.** `HostLink` / `GuestLink` wrap desigma-net so tests can use in-memory channels.
-  `DESIGMA_COLLAB_NETWORK=direct` skips relays (LAN, loopback).
+* **Transport traits.** `HostLink` / `GuestLink` wrap a11y-net so tests can use in-memory channels.
+  `A11Y_COLLAB_NETWORK=direct` skips relays (LAN, loopback).
 * **Undo.** Guest messages go through `rebase_history`; the host rebases its own history for guest ops. An undo
   that fails with NotFound after a remote delete is silent.
 * **Read-only.** `App::read_only()` (old version or view-only guest) gates `run_tx` and the canvas. The host
@@ -230,16 +230,16 @@ the desigma-net adapters, `presence.rs`, `ui.rs`, `draw.rs`, `tests.rs`).
   keeps its id range until the session ends. Viewing or restoring old versions is refused while hosting.
 * **Joining.** The shared file replaces the open document (like File, Open), is not tied to a path, and
   "Save a copy" uses Save to library. The display name is the "Your name" setting (OS user name by default).
-* **Link scheme.** `desigma desigma://join/...` opens Join prefilled. Registered by the Windows installer
-  (`scripts/windows/desigma.iss`), `CFBundleURLTypes` (macOS) and `x-scheme-handler/desigma` (Linux).
+* **Link scheme.** `a11y a11y://join/...` opens Join prefilled. Registered by the Windows installer
+  (`scripts/windows/a11y.iss`), `CFBundleURLTypes` (macOS) and `x-scheme-handler/a11y` (Linux).
 
 * **Links and files reach the running editor.** On macOS, links and Finder opens arrive as Apple events,
   which winit does not surface; `src/macos.rs` registers an `NSAppleEventManager` handler (`GURL` and
   `odoc`) at startup and again once the app has launched. On Windows and Linux a second
-  `desigma desigma://join/...` (or `desigma FILE`) process connects to the running editor and exits without
+  `a11y a11y://join/...` (or `a11y FILE`) process connects to the running editor and exits without
   a window (`src/instance.rs`): a `127.0.0.1` listener on an ephemeral port, with the port and a random token
   in `instance.json` (per-user runtime or local data dir, 0600 on unix). It accepts only
-  `<token> open-link desigma://join/...`, `open-file <absolute path>` and `ping`, in lines of at most
+  `<token> open-link a11y://join/...`, `open-file <absolute path>` and `ping`, in lines of at most
   4 KiB. A stale file (connection refused) just means a normal start. Both paths feed one inbox that the UI
   drains each frame: Join opens prefilled, a file opens like a dropped one (both ask "Discard unsaved changes?" with Save / Discard / Cancel first when the editor has unsaved edits or a live session), and the window is
   un-minimized and focused (or asks for attention when the OS refuses focus).
@@ -250,14 +250,14 @@ Share strip instead of the inspector row.
 ## Implementation notes (phase 5: reconnect, fonts, image cache)
 
 **Wire.** Protocol version 2. Image and font bytes are base64 strings inside the JSON message
-(`desigma_collab::b64`), not number arrays. Measured with 200 000 bytes of incompressible image data
+(`a11y_collab::b64`), not number arrays. Measured with 200 000 bytes of incompressible image data
 (`base64_images_cost_about_their_raw_size...`): JSON 267 KB against 714 KB before; on the wire, after the
 frame's deflate, 201 KB against 268 KB (454 KB with the old deflate level, see below). So base64 costs
 about the raw size and a separate binary message kind would add a second code path for almost
 nothing. The frame deflate level went from 1 to 4: zlib-rs only uses fixed Huffman codes at level 1, and
 those cannot shrink base64 text at all.
 
-**Core (`desigma-collab`).**
+**Core (`a11y-collab`).**
 * `HostSession::add_peer` also creates a random secret (two UUIDs); `resume_msg(peer)` is the
   `ServerMsg::Resume { token }` that gives it to the guest, sent after the snapshot.
 * `remove_peer` keeps the peer index and the secret (and remembers the role) for the rest of the
@@ -269,7 +269,7 @@ those cannot shrink base64 text at all.
   what the host still misses. Refuses a snapshot for another peer.
 * The in-memory simulation cuts and resumes guests at random while everyone edits and must converge.
 
-**Transport (`desigma-net`).** `Hello.resume` (opaque string), `Guest::join_resume`, and on the host
+**Transport (`a11y-net`).** `Hello.resume` (opaque string), `Guest::join_resume`, and on the host
 `allow_resume(token)` / `revoke_resume` (a guest showing a trusted secret skips the approval prompt
 and the peer limit; the password is still checked), `join_token(peer)` (the secret a joining peer showed,
 handed out once, ask right after `PeerJoined`). `Host::sever` cuts a connection like a network failure,
@@ -299,34 +299,34 @@ Known gaps: the cache cannot know in advance about images that appear after the 
 session asks the host once for each; a host restarting its session gets a new link, and guests do not
 follow; a font the host could not send is not retried.
 
-## Phase 5: `desigma-server`
+## Phase 5: `a11y-server`
 
-Code: `crates/desigma-server` (library plus the `desigma-server` binary; usage, systemd unit and security
+Code: `crates/a11y-server` (library plus the `a11y-server` binary; usage, systemd unit and security
 notes in its README).
 
 * **Same protocol, same code.** The wire types (`ToGuest`, `ToHost`, `ImageInfo`, `FontKey`, the SHA-256
-  `digest`) and the UI-free host routing live in `desigma_collab::wire`; the app host and the server both call
+  `digest`) and the UI-free host routing live in `a11y_collab::wire`; the app host and the server both call
   it. `admit` is the one join sequence: the resume secret the transport saw (`join_token`) re-seats a returning
   guest as the same peer (`HostSession::resume`), otherwise `add_peer` + `allow_resume`; a stale connection of
   that peer is kicked; then `Role`, `Images` (when the file has images), `Snapshot`, `Resume`. `route` delivers
   `Out`s by `Dest`, `relay` passes presence on, `answer_fonts` answers `ToHost::Fonts` through a callback. The
   transport is the small `HostWire` trait (the app implements it for its `HostLink`, the server on
-  `desigma_net::Host`). What stays in each host: the app's toasts, approval, undo rebase and cursors; the
+  `a11y_net::Host`). What stays in each host: the app's toasts, approval, undo rebase and cursors; the
   server's autosave. A test pins the JSON of every variant.
 * **Reconnect and fonts.** Returning guests get their peer back with no approval. The server has no font
   system, so every `Fonts` request is answered with empty bytes ("cannot share").
 * **Authority and persistence.** It applies guests' ops to its own document, autosaves when changed (default
   10 s) and on Ctrl-C / `SIGTERM`, always temp file plus rename, with rotating `FILE.bak.N` backups.
-  `.fig` / `.pen` / REST `.json` / `.svg` inputs are imported once and saved as `.desigma` next to the source.
+  `.fig` / `.pen` / REST `.json` / `.svg` inputs are imported once and saved as `.a11y` next to the source.
 * **Stable link.** `HostOptions` gained `secret_key` (fixed endpoint identity) and `port`; the server keeps the
-  key in `.<name>.desigma-key` (mode 0600 on Unix). `Ticket::relay_only` drops direct addresses so the link
+  key in `.<name>.a11y-key` (mode 0600 on Unix). `Ticket::relay_only` drops direct addresses so the link
   does not change when the IP does.
 * **No approval.** Nobody is there to click Accept, so everyone passing the password is let in; the password
   (preferably via `--password-env`) is the gate, and `--view-only` makes everyone a viewer.
 
 ## Keyed collections (protocol 3)
 
-Code: `crates/desigma-collab/src/entries.rs`. Before protocol 3 every document-level field travelled as one
+Code: `crates/a11y-collab/src/entries.rs`. Before protocol 3 every document-level field travelled as one
 `DocPatch` value, so two people adding a comment, a vote, a style or a variable at the same time lost one.
 
 * **One op, a path as key.** `Op::DocEntry { field, key, value }` sets one entry (`value: Some`) or removes it

@@ -3,14 +3,14 @@
 #
 #   scripts/package.sh <target-triple> <version> [bin-dir]
 #
-# Expects `desigma`, `desigma-diff` and `desigma-mcp` already built in release mode. bin-dir
+# Expects `a11y`, `a11y-diff` and `a11y-mcp` already built in release mode. bin-dir
 # defaults to target/<triple>/release, falling back to target/release (a plain
 # `cargo build --release` without --target). Writes into dist/:
-#   desigma-<version>-<triple>.zip     (Windows) or .tar.gz (Linux)
+#   a11y-<version>-<triple>.zip     (Windows) or .tar.gz (Linux)
 #   <archive>.sha256                   (checksum line; CI merges these into SHA256SUMS)
 # macOS is packaged by scripts/package-macos.sh (universal .app, .dmg and .tar.gz).
-# The Windows exe carries its icon (embedded by crates/desigma-app/build.rs); the Linux
-# tarball adds desigma.desktop, icons/<size>.png and install.sh.
+# The Windows exe carries its icon (embedded by crates/a11y-app/build.rs); the Linux
+# tarball adds a11y.desktop, icons/<size>.png and install.sh.
 set -euo pipefail
 
 target=${1:?usage: package.sh <target-triple> <version> [bin-dir]}
@@ -25,19 +25,19 @@ case "$target" in
   *) exe=; fmt=tar.gz ;;
 esac
 
-name=desigma-$version-$target
+name=a11y-$version-$target
 root=$(pwd)
 stage=$root/dist/$name
 rm -rf "$stage"
 mkdir -p "$stage"
 
-for bin in desigma desigma-diff desigma-mcp; do
+for bin in a11y a11y-diff a11y-mcp; do
   cp "$bin_dir/$bin$exe" "$stage/"
 done
 cp LICENSE-MIT LICENSE-APACHE README.md "$stage/"
 mkdir -p "$stage/licenses"
-cp "$root/crates/desigma-fonts/assets/inter/OFL.txt" "$stage/licenses/Inter-OFL.txt"
-cp "$root/crates/desigma-app/assets/icons/lucide/LICENSE" "$stage/licenses/Lucide-LICENSE.txt"
+cp "$root/crates/a11y-fonts/assets/inter/OFL.txt" "$stage/licenses/Inter-OFL.txt"
+cp "$root/crates/a11y-app/assets/icons/lucide/LICENSE" "$stage/licenses/Lucide-LICENSE.txt"
 
 case "$target" in
   *linux*)
@@ -45,9 +45,9 @@ case "$target" in
     for size in 16 32 48 64 128 256 512; do
       cp "$root/assets/icon/png/icon_$size.png" "$stage/icons/$size.png"
     done
-    cp "$root/packaging/linux/desigma.desktop" "$root/packaging/linux/desigma-mime.xml" "$stage/"
+    cp "$root/packaging/linux/a11y.desktop" "$root/packaging/linux/a11y-mime.xml" "$stage/"
     cp "$root/packaging/linux/install.sh" "$stage/install.sh"
-    chmod +x "$stage/install.sh" "$stage/desigma" "$stage/desigma-diff" "$stage/desigma-mcp"
+    chmod +x "$stage/install.sh" "$stage/a11y" "$stage/a11y-diff" "$stage/a11y-mcp"
     ;;
 esac
 

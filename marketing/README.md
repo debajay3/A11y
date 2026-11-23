@@ -1,7 +1,7 @@
-# desigma marketing kit
+# a11y marketing kit
 
-Images, sources and copy for announcing desigma. Everything here is free to use
-for writing about, linking to or promoting desigma.
+Images, sources and copy for announcing a11y. Everything here is free to use
+for writing about, linking to or promoting a11y.
 
 ## Images
 
@@ -47,8 +47,8 @@ retina-size exports.
 
 ## Brand
 
-- **Name:** desigma, always lowercase, including at the start of a sentence.
-- **Logo mark:** [`../docs/brand/desigma-mark.svg`](../docs/brand/desigma-mark.svg). Keep it square with clear space of
+- **Name:** a11y, always lowercase, including at the start of a sentence.
+- **Logo mark:** [`../docs/brand/a11y-mark.svg`](../docs/brand/a11y-mark.svg). Keep it square with clear space of
   at least a quarter of its width; don't recolor the inner shapes, rotate or
   add effects. On a blue background, use the inverted version (white square,
   blue shapes) as on the GitHub preview.
@@ -56,7 +56,7 @@ retina-size exports.
 
 | Role | Hex |
 |---|---|
-| desigma blue | `#0C8CE9` |
+| a11y blue | `#0C8CE9` |
 | Deep blue (small text on light, badges) | `#0A5FA8` |
 | Ink | `#0E0F12` |
 | Canvas light | `#ECEBE6` |
@@ -66,7 +66,7 @@ retina-size exports.
 
 - **Type:** Bricolage Grotesque (headlines, 800; body, 400–600) and IBM Plex
   Mono (labels, measurements, URLs). Both are free under the OFL.
-- **Visual language:** the promo images are drawn as if on desigma's own canvas:
+- **Visual language:** the promo images are drawn as if on a11y's own canvas:
   dotted ground, rulers, selection boxes with handles and size badges,
   component-instance outlines, prototype connectors, floating panels and
   cursors. Reuse those elements rather than gradients or stock imagery.
@@ -86,26 +86,26 @@ release; check [the README](../README.md) before quoting feature lists.
 
 **One line**
 
-> desigma is a free, open-source design tool built in pure Rust: native, offline, and able to open your .fig files.
+> a11y is a free, open-source design tool built in pure Rust: native, offline, and able to open your .fig files.
 
 **Short description**
 
-> desigma is a free, open-source design tool for Windows, macOS and Linux, written in pure Rust. It has the everyday design surface you expect (frames, auto layout, components and variants, variables with modes, prototyping, Dev mode code generation and whiteboards) and imports Figma's .fig and REST JSON files. No account, no subscription, and your files stay on your machine.
+> a11y is a free, open-source design tool for Windows, macOS and Linux, written in pure Rust. It has the everyday design surface you expect (frames, auto layout, components and variants, variables with modes, prototyping, Dev mode code generation and whiteboards) and imports Figma's .fig and REST JSON files. No account, no subscription, and your files stay on your machine.
 
 **Release post** *(edit the version and highlights)*
 
-> desigma v0.1.0-alpha.3 is out. New in this release: a GPU canvas, real text lists and OpenType features, vector networks and a Shape Builder, much better .fig import, variables and conditions in prototypes, Tailwind/SwiftUI/Compose code in Dev mode, and a whiteboard mode. Free and open source, for Windows, macOS and Linux: https://github.com/deepfounder-ai/desigma/releases
+> a11y v0.1.0-alpha.3 is out. New in this release: a GPU canvas, real text lists and OpenType features, vector networks and a Shape Builder, much better .fig import, variables and conditions in prototypes, Tailwind/SwiftUI/Compose code in Dev mode, and a whiteboard mode. Free and open source, for Windows, macOS and Linux: https://github.com/debajay3/A11y/releases
 
 **Short social post**
 
-> We're building a design tool you actually own. desigma is free, open source, offline and written in Rust, and it opens .fig files. Alpha builds for Windows, macOS and Linux: https://github.com/deepfounder-ai/desigma
+> We're building a design tool you actually own. a11y is free, open source, offline and written in Rust, and it opens .fig files. Alpha builds for Windows, macOS and Linux: https://github.com/debajay3/A11y
 
 **Before you post**
 
-- desigma is early alpha. Say so, and link to the release notes rather than
+- a11y is early alpha. Say so, and link to the release notes rather than
   promising parity with commercial tools.
 - Release builds aren't code-signed yet; point new users to
   [docs/install.md](../docs/install.md) for the first-launch warning.
 - Figma is a trademark of Figma, Inc. Mention it only to describe file
   compatibility ("opens .fig files"), and keep the line
-  "desigma is not affiliated with Figma, Inc." on any material that names it.
+  "a11y is not affiliated with Figma, Inc." on any material that names it.

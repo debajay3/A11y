@@ -1,0 +1,16 @@
+[package]
+name = "a11y-library"
+description = "On-disk projects library: files, folders, thumbnails, trash, version history and published libraries"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+a11y-doc.workspace = true
+a11y-fig.workspace = true
+a11y-svg.workspace = true
+a11y-pen.workspace = true
+dirs = "5"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
