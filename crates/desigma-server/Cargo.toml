@@ -14,6 +14,8 @@ name = "desigma-server"
 path = "src/main.rs"
 
 [dependencies]
+tiny_http = "0.12"
+
 desigma-doc.workspace = true
 desigma-collab.workspace = true
 desigma-net.workspace = true
@@ -21,3 +23,7 @@ desigma-library.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { version = "1", features = ["rt", "signal"] }
+
+[[bin]]
+name = "a11y-library-server"
+path = "src/workspace_main.rs"

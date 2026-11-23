@@ -186,13 +186,8 @@ impl Drop for NetHost {
 pub struct NetGuest(Option<Guest>);
 
 impl NetGuest {
-    pub fn join(ticket: &Ticket, name: &str, password: Option<&str>, wake: Box<dyn Fn() + Send + Sync>) -> Result<Self, String> {
-        Self::join_resume(ticket, name, password, wake, None)
-    }
-
-    /// [`Self::join`] showing the secret of an earlier visit.
-    pub fn join_resume(ticket: &Ticket, name: &str, password: Option<&str>, wake: Box<dyn Fn() + Send + Sync>, resume: Option<String>) -> Result<Self, String> {
-        let g = Guest::join_resume(ticket, name, password, GuestOptions { network: network(), ..Default::default() }, resume).map_err(|e| e.to_string())?;
+    pub fn join_resume_network(ticket: &Ticket, name: &str, password: Option<&str>, wake: Box<dyn Fn() + Send + Sync>, resume: Option<String>, network: Network) -> Result<Self, String> {
+        let g = Guest::join_resume(ticket, name, password, GuestOptions { network, ..Default::default() }, resume).map_err(|e| e.to_string())?;
         g.set_wake(wake);
         Ok(Self(Some(g)))
     }
@@ -244,10 +239,10 @@ impl Drop for NetGuest {
 pub fn join_error_text(e: &JoinError) -> String {
     match e {
         JoinError::VersionMismatch { host, guest } if host < guest => format!(
-            "The host runs an older desigma that cannot share with yours (sharing protocol {host}, yours {guest}). Ask them to update to the latest release and share the file again."
+            "The host runs an older A11y that cannot share with yours (sharing protocol {host}, yours {guest}). Ask them to update to the latest release and share the file again."
         ),
         JoinError::VersionMismatch { host, guest } => format!(
-            "The host runs a newer desigma than yours (sharing protocol {host}, yours {guest}). Update desigma to the latest release and try again."
+            "The host runs a newer A11y than yours (sharing protocol {host}, yours {guest}). Update A11y to the latest release and try again."
         ),
         JoinError::WrongPassword => "Wrong password. Check it with the person who shared the link.".into(),
         JoinError::Locked { retry_secs } => format!("Too many wrong passwords. Try again in {retry_secs} seconds."),
@@ -257,6 +252,6 @@ pub fn join_error_text(e: &JoinError) -> String {
             format!("Cannot reach the host. Check the link and your internet connection, and that the host still has the file shared. ({s})")
         }
         JoinError::Timeout => "The host did not answer in time. Try again.".into(),
-        JoinError::Protocol(s) => format!("The host sent something unexpected ({s}). Make sure you both run the same version of desigma."),
+        JoinError::Protocol(s) => format!("The host sent something unexpected ({s}). Make sure you both run the same version of A11y."),
     }
 }

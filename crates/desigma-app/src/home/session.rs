@@ -60,6 +60,7 @@ impl App {
     pub fn attach_library(&mut self, root: PathBuf) {
         // Shared libraries use the same root as the projects library.
         self.libs.set_root(root.clone());
+        self.workspace.load(&root);
         match Library::open(&root) {
             Ok(lib) => {
                 match lib.seed_first_run(crate::demo::demo_document) {
@@ -94,6 +95,7 @@ impl App {
         self.end_collab();
         self.canvas.reset_interaction();
         let mut home = Home::new();
+        if self.workspace.configured() { home.section = super::Section::Shared; }
         home.refresh(&lib);
         self.home = Some(home);
         self.ui.menu = None;

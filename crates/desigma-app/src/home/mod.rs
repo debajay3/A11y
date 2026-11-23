@@ -26,6 +26,7 @@ pub const GITHUB_URL: &str = "https://github.com/deepfounder-ai/desigma";
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Section {
+    Shared,
     Recents,
     Starred,
     /// A project, optionally narrowed to one folder.
@@ -169,7 +170,7 @@ impl Home {
                 Section::Recents => self.snap.files.clone(),
                 Section::Starred => self.snap.files.iter().filter(|f| f.starred).cloned().collect(),
                 Section::Project(p, folder) => self.snap.files.iter().filter(|f| &f.project == p && &f.folder == folder).cloned().collect(),
-                Section::Trash => vec![],
+                Section::Trash | Section::Shared => vec![],
             }
         };
         match self.sort {
@@ -200,6 +201,7 @@ impl Home {
             Section::Recents => "Recents".into(),
             Section::Starred => "Starred".into(),
             Section::Trash => "Trash".into(),
+            Section::Shared => "Shared library".into(),
             Section::Project(p, _) => self.snap.project_name(p).to_string(),
         }
     }
@@ -220,6 +222,7 @@ pub enum Act {
     Import,
     /// Opens the Join session dialog.
     JoinSession,
+    PublishShared(String),
     /// Opens the Claude connection dialog.
     Mcp,
     NewProject,
@@ -255,7 +258,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     h.drop_rects.clear();
     let mut acts = Vec::new();
     sidebar::show(&mut h, ui, side, &mut acts);
-    main_view::show(&lib, &mut h, ui, main, &mut acts);
+    let shared_open = if h.section == Section::Shared { crate::workspace::show(app, ui, main, &h.search) }
+    else { main_view::show(&lib, &mut h, ui, main, &mut acts); None };
     menus(&mut h, ui.ctx(), &mut acts);
     drag_ghost(&mut h, ui, &mut acts);
     // Escape clears the search.
@@ -263,6 +267,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         h.search.clear();
     }
     app.home = Some(h);
+    if let Some((link, key)) = shared_open {
+        app.open_join(Some(link));
+        if let Some(j) = &mut app.collab.join { j.password = key; j.direct = true; }
+    }
     for a in acts {
         apply(app, a);
     }
@@ -302,6 +310,7 @@ pub fn context_entries(h: &Home, target: &Target) -> Vec<(crate::widgets::menu::
             let starred = h.file(id).is_some_and(|f| f.starred);
             vec![
                 (MenuItem::new("Open"), Act::Open(id.clone())),
+                (MenuItem::new("Publish to shared library…"), Act::PublishShared(id.clone())),
                 (MenuItem::new("Open in new window").sep(), Act::OpenWindow(id.clone())),
                 (MenuItem::new("Rename"), Act::RenameFile(id.clone())),
                 (MenuItem::new("Duplicate"), Act::Duplicate(id.clone())),
@@ -412,6 +421,11 @@ pub fn apply(app: &mut App, act: Act) {
             app.new_library_board(target);
         }
         Act::JoinSession => app.open_join(None),
+        Act::PublishShared(id) => {
+            match lib.load_file(&id).and_then(|d| d.to_json().map_err(|e| desigma_library::LibraryError::Invalid(e.to_string()))) {
+                Ok(text) => app.publish_to_workspace(text), Err(e) => app.show_toast(e.to_string(), true),
+            }
+        }
         Act::Mcp => {
             app.mcp_error = None;
             app.mcp_dialog = true;
@@ -424,7 +438,7 @@ pub fn apply(app: &mut App, act: Act) {
                 .add_filter("Pencil file", &["pen"])
                 .add_filter("SVG", &["svg"])
                 .add_filter("JSON", &["json"])
-                .add_filter("desigma", &["desigma"])
+                .add_filter("A11y design", &["desigma"])
                 .pick_files();
             if let Some(paths) = paths {
                 let target = match app.home_target() {

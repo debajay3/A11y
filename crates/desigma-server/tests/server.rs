@@ -139,6 +139,42 @@ fn names(doc: &Document) -> Vec<String> {
 }
 
 #[test]
+fn collaborator_edits_after_creator_leaves_and_creator_sees_changes_on_return() {
+    let d = dir("creator-offline");
+    let file = d.join("shared.desigma");
+    let node = seed(&file);
+    let running = Running::start(Server::start(config(&file, free_port())).unwrap());
+    let link = std::fs::read_to_string(file.with_extension("link")).unwrap();
+    let link = link.trim();
+
+    let creator = join(link, "Creator", Some("pw")).unwrap();
+    let _ = open(&creator);
+    let collaborator = join(link, "Collaborator", Some("pw")).unwrap();
+    let (mut session, mut document, role, _) = open(&collaborator);
+    assert_eq!(role, Role::Editor);
+
+    creator.leave();
+    drop(creator);
+    document.nodes.get_mut(&node).unwrap().name = "Edited while creator was offline".into();
+    commit(&collaborator, &mut session, &mut document);
+    wait_for("offline creator edit to autosave", || {
+        let saved = Document::from_json(&std::fs::read_to_string(&file).ok()?).ok()?;
+        (saved.get(node)?.name == "Edited while creator was offline").then_some(())
+    });
+    collaborator.leave();
+    drop(collaborator);
+
+    // No desktop client remains connected. A fresh connection must still see the saved edits.
+    let returning_creator = join(link, "Creator", Some("pw")).unwrap();
+    let (_, latest, _, _) = open(&returning_creator);
+    assert_eq!(latest.get(node).unwrap().name, "Edited while creator was offline");
+    returning_creator.leave();
+    drop(returning_creator);
+    running.stop().shutdown().unwrap();
+    std::fs::remove_dir_all(d).unwrap();
+}
+
+#[test]
 fn edits_autosave_and_the_link_survive_a_restart() {
     let d = dir("restart");
     let file = d.join("shared.desigma");

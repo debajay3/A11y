@@ -3,7 +3,7 @@
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=../../assets/icon/desigma.ico");
+    println!("cargo:rerun-if-changed=../../assets/a11y/A11y.ico");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
@@ -17,12 +17,12 @@ fn main() {
     }
     let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.0.0".into());
     let mut res = winresource::WindowsResource::new();
-    res.set_icon("../../assets/icon/desigma.ico");
-    res.set("ProductName", "desigma");
-    res.set("FileDescription", "desigma");
+    res.set_icon("../../assets/a11y/A11y.ico");
+    res.set("ProductName", "A11y");
+    res.set("FileDescription", "A11y design editor");
     res.set("CompanyName", "desigma contributors");
     res.set("LegalCopyright", "MIT OR Apache-2.0");
-    res.set("OriginalFilename", "desigma.exe");
+    res.set("OriginalFilename", "A11y.exe");
     res.set("ProductVersion", &version);
     res.set("FileVersion", &version);
     if let Err(e) = res.compile() {

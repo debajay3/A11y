@@ -250,18 +250,22 @@ impl App {
 
     /// Dials the host from a pasted link. Errors come back as text for the Join dialog.
     pub fn join_session(&mut self, ctx: &egui::Context, text: &str, name: &str, password: &str) -> Result<(), String> {
+        self.join_session_network(ctx, text, name, password, link::network())
+    }
+
+    pub fn join_session_network(&mut self, ctx: &egui::Context, text: &str, name: &str, password: &str, network: desigma_net::Network) -> Result<(), String> {
         let ticket =
-            desigma_net::Ticket::parse(text).map_err(|_| "That does not look like a desigma session link. It starts with desigma://join/".to_string())?;
+            desigma_net::Ticket::parse(text).map_err(|_| "That does not look like an A11y session link. It starts with desigma://join/".to_string())?;
         if ticket.password_required && password.is_empty() {
             return Err("This session needs a password. Ask the person who shared it.".into());
         }
         let wake = |c: egui::Context| -> Box<dyn Fn() + Send + Sync> { Box::new(move || c.request_repaint()) };
         let pw = (!password.is_empty()).then_some(password);
-        let g = link::NetGuest::join(&ticket, name, pw, wake(ctx.clone())).map_err(|e| format!("Cannot start joining: {e}"))?;
+        let g = link::NetGuest::join_resume_network(&ticket, name, pw, wake(ctx.clone()), None, network).map_err(|e| format!("Cannot start joining: {e}"))?;
         let (ctx, name, password) = (ctx.clone(), name.to_string(), password.to_string());
         let redial: Redial = Box::new(move |token| {
             let pw = (!password.is_empty()).then_some(password.as_str());
-            link::NetGuest::join_resume(&ticket, &name, pw, wake(ctx.clone()), token.map(str::to_string)).map(|g| Box::new(g) as Box<dyn GuestLink>)
+            link::NetGuest::join_resume_network(&ticket, &name, pw, wake(ctx.clone()), token.map(str::to_string), network).map(|g| Box::new(g) as Box<dyn GuestLink>)
         });
         self.join_with_redial(Box::new(g), Some(redial));
         Ok(())
@@ -706,7 +710,7 @@ fn finish_join(app: &mut App, j: Joining, snapshot: ServerMsg, digests: Vec<Imag
     let Some((sess, doc, requests)) = GuestSession::join(snapshot) else {
         j.link.leave();
         if let Some(u) = app.collab.join.as_mut() {
-            u.error = Some("The host sent something unexpected. Make sure you both run the same version of desigma.".into());
+            u.error = Some("The host sent something unexpected. Make sure you both run the same version of A11y.".into());
             u.connecting = false;
         }
         return;

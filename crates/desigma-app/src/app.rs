@@ -155,6 +155,7 @@ pub struct App {
     pub lib_file: Option<crate::home::LibFile>,
     /// Some while the home screen (file browser) is showing instead of the editor.
     pub home: Option<crate::home::Home>,
+    pub workspace: crate::workspace::Workspace,
     /// The open modal dialog (prompts, confirmations, shortcuts, About).
     pub dialog: Option<crate::home::Dialog>,
     pub autosave: crate::home::Autosave,
@@ -225,6 +226,7 @@ impl App {
             lib: None,
             lib_file: None,
             home: None,
+            workspace: Default::default(),
             dialog: None,
             autosave: Default::default(),
             renaming_file: false,

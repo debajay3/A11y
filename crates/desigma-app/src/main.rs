@@ -55,6 +55,7 @@ mod vecfixture;
 mod vecops;
 mod video;
 mod widgets;
+mod workspace;
 
 use std::sync::atomic::Ordering;
 
@@ -64,7 +65,7 @@ pub const VERSION: &str = match option_env!("DESIGMA_VERSION") {
     None => env!("CARGO_PKG_VERSION"),
 };
 /// Only release builds carry a stamped version; builds from source never look for updates.
-pub const RELEASE_BUILD: bool = option_env!("DESIGMA_VERSION").is_some();
+pub const RELEASE_BUILD: bool = false; // A11y updates must never install upstream Desigma builds.
 
 /// The app icon (256 px PNG embedded at build time) for the taskbar, Dock and alt-tab. Every window
 /// desigma opens (including Present and "open in new window" processes) starts through `main`, so
@@ -74,9 +75,9 @@ fn window_icon() -> Option<egui::IconData> {
     // the squircle needs the same transparent margin the .icns has; elsewhere the edge-to-edge art
     // fills title bars and taskbars as intended.
     #[cfg(target_os = "macos")]
-    const PNG: &[u8] = include_bytes!("../../../assets/icon/desigma.iconset/icon_256x256.png");
+    const PNG: &[u8] = include_bytes!("../../../assets/a11y/A11y.iconset/icon_256x256.png");
     #[cfg(not(target_os = "macos"))]
-    const PNG: &[u8] = include_bytes!("../../../assets/icon/png/icon_256.png");
+    const PNG: &[u8] = include_bytes!("../../../assets/a11y/A11y.iconset/icon_256x256.png");
     let img = image::load_from_memory_with_format(PNG, image::ImageFormat::Png).ok()?.into_rgba8();
     let (width, height) = img.dimensions();
     Some(egui::IconData { rgba: img.into_raw(), width, height })
@@ -112,7 +113,7 @@ fn main() {
         return;
     }
     if opts.version {
-        println!("desigma {VERSION}");
+        println!("A11y {VERSION}");
         return;
     }
     if opts.print_library_path {

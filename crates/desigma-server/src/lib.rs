@@ -139,7 +139,16 @@ impl Server {
             ..Default::default()
         })
         .map_err(|e| e.to_string())?;
-        let ticket = host.wait_ticket(Duration::from_secs(30)).ok_or("could not start networking (no ticket after 30 s)")?;
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let ticket = loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match host.recv_timeout(remaining) {
+                Some(HostEvent::Ready(ticket)) => break ticket,
+                Some(HostEvent::Failed(error)) => return Err(format!("could not start networking: {error}")),
+                Some(_) => continue,
+                None => return Err("could not start networking (no ticket after 30 s)".into()),
+            }
+        };
         // Direct addresses change between runs; with a relay known the link carries only that.
         let link = ticket.relay_only().to_link();
         if let Some(p) = &cfg.link_file {

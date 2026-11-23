@@ -20,6 +20,7 @@
 mod publish;
 mod store;
 mod versions;
+pub mod workspace;
 
 pub use publish::*;
 pub use store::*;

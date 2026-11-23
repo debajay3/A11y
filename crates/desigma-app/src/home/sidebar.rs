@@ -20,7 +20,7 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
 
     // ---- brand
     icons::paint(&p, Icon::Logo, Pos2::new(x0 + 28.0, y + 28.0), 24.0, theme::ICON);
-    p.text(Pos2::new(x0 + 48.0, y + 28.0), Align2::LEFT_CENTER, "desigma", theme::font_large_strong(), theme::TEXT);
+    p.text(Pos2::new(x0 + 48.0, y + 28.0), Align2::LEFT_CENTER, "A11y", theme::font_large_strong(), theme::TEXT);
     y += 56.0;
 
     // ---- search
@@ -50,9 +50,9 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
     y += 32.0 + 12.0;
 
     // ---- Recents / Starred
-    for (icon, label, section, key) in [(Icon::Clock, "Recents", Section::Recents, "recents"), (Icon::Star, "Starred", Section::Starred, "starred")] {
+    for (icon, label, section, key) in [(Icon::Folder, "Shared library", Section::Shared, "shared"), (Icon::Clock, "Recents", Section::Recents, "recents"), (Icon::Star, "Starred", Section::Starred, "starred")] {
         let r = Rect::from_min_size(Pos2::new(x0 + 8.0, y), Vec2::new(w - 16.0, ROW_H));
-        let selected = h.section == section && !h.searching();
+        let selected = h.section == section && (!h.searching() || h.section == Section::Shared);
         if row(ui, r, Id::new(("home-nav", key)), icon, crate::i18n::tr(label), 0.0, selected, false, key).clicked() {
             acts.push(Act::Go(section));
         }
@@ -61,7 +61,7 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
     y += 12.0;
 
     // ---- Projects header
-    p.text(Pos2::new(x0 + 20.0, y + 14.0), Align2::LEFT_CENTER, crate::i18n::tr("Projects"), theme::font_body_strong(), theme::TEXT_SECONDARY);
+    p.text(Pos2::new(x0 + 20.0, y + 14.0), Align2::LEFT_CENTER, "On this Mac", theme::font_body_strong(), theme::TEXT_SECONDARY);
     let plus = Rect::from_min_size(Pos2::new(x0 + w - 12.0 - 24.0, y + 2.0), Vec2::splat(24.0));
     if widgets::icon_button(ui, plus, "home-new-project", Icon::Plus, false, "New project").clicked() {
         acts.push(Act::NewProject);

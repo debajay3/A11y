@@ -75,7 +75,7 @@ fn write_server(path: &Path, entry: &Value) -> Result<(), String> {
 
 /// Registers Desigma with Claude and turns the agent bridge on.
 pub fn connect(app: &mut App, ctx: &Context) -> Result<String, String> {
-    let program = mcp_program().ok_or_else(|| "The MCP program was not found next to Desigma. Reinstall Desigma.".to_string())?;
+    let program = mcp_program().ok_or_else(|| "The MCP program was not found next to A11y. Reinstall A11y.".to_string())?;
     let workspace = workspace_dir(app);
     std::fs::create_dir_all(&workspace).map_err(|e| format!("Cannot prepare the library folder: {e}"))?;
     let entry = server_entry(&program, &workspace);

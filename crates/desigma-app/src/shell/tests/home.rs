@@ -170,9 +170,9 @@ fn right_click_menu_moves_a_file_to_the_trash_and_trash_restores_it() {
     let card = s.rect_of("home-card-Welcome");
     s.right_click(card.center());
     assert!(s.app().home.as_ref().unwrap().menu.is_some(), "context menu open");
-    // "Move to trash" is the 8th row, after three separators
+    // "Move to trash" is the 9th row, after three separators
     let pos = card.center();
-    let y = pos.y + theme::MENU_PADDING + 7.0 * theme::MENU_ITEM_HEIGHT + 3.0 * crate::widgets::menu::SEP_H + theme::MENU_ITEM_HEIGHT / 2.0;
+    let y = pos.y + theme::MENU_PADDING + 8.0 * theme::MENU_ITEM_HEIGHT + 3.0 * crate::widgets::menu::SEP_H + theme::MENU_ITEM_HEIGHT / 2.0;
     s.click(Pos2::new(pos.x + 60.0, y));
     s.frame(vec![]);
     let l = lib(&s);
@@ -410,4 +410,29 @@ fn library_option_sets_the_root_and_home_option_shows_the_home_screen() {
     // without --home a screenshot run stays in the editor and never touches a library
     let e = Sim::with(Options { screenshot: Some(dir.0.join("e.png")), ..Default::default() });
     assert!(e.app().home.is_none() && e.app().lib.is_none());
+}
+
+#[test]
+fn shared_library_has_a_persistent_navigation_entry_and_connection_form() {
+    let (mut s, _d) = home_sim();
+    crate::home::apply(&mut s.shell.app, Act::Go(Section::Shared));
+    s.frame(vec![]);
+    assert_eq!(s.app().home.as_ref().unwrap().section, Section::Shared);
+    assert!(s.app().workspace.catalog.files.is_empty());
+    assert_eq!(theme::APP_TITLE, "A11y");
+    crate::home::apply(&mut s.shell.app, Act::Go(Section::Recents));
+    s.frame(vec![]);
+    assert_eq!(s.app().home.as_ref().unwrap().snap.files.len(), 1);
+}
+
+#[test]
+fn publish_from_local_library_stages_a_copy_without_changing_the_original() {
+    let (mut s, _d) = home_sim();
+    let id = file_id(&s, "Welcome");
+    let before = lib(&s).load_file(&id).unwrap().to_json().unwrap();
+    crate::home::apply(&mut s.shell.app, Act::PublishShared(id.clone()));
+    s.frame(vec![]);
+    assert_eq!(s.app().home.as_ref().unwrap().section, Section::Shared);
+    assert_eq!(s.app().workspace.draft.as_deref(), Some(before.as_str()));
+    assert_eq!(lib(&s).load_file(&id).unwrap().to_json().unwrap(), before);
 }

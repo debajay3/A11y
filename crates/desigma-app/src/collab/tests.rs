@@ -464,7 +464,7 @@ fn join_error_texts_are_clear() {
     }
     // The older side is the one told to update.
     assert!(link::join_error_text(&VersionMismatch { host: 1, guest: 2 }).contains("Ask them to update"));
-    assert!(link::join_error_text(&VersionMismatch { host: 2, guest: 1 }).contains("Update desigma"));
+    assert!(link::join_error_text(&VersionMismatch { host: 2, guest: 1 }).contains("Update A11y"));
 }
 
 #[test]

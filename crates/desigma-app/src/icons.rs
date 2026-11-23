@@ -602,15 +602,16 @@ pub fn paint(p: &Painter, icon: Icon, center: Pos2, size: f32, col: Color32) {
     }
 }
 
-/// The brand mark (hand-drawn, ours): a rounded square with a white "d".
+/// Temporary A11y mark: two allies form an A with an open centre.
 fn paint_logo(p: &Painter, center: Pos2, size: f32) {
     let k = size / 16.0;
     let o = Pos2::new(center.x - size / 2.0, center.y - size / 2.0);
     let pt = |x: f32, y: f32| Pos2::new(o.x + x * k, o.y + y * k);
-    p.rect_filled(Rect::from_min_size(pt(1.0, 1.0), Vec2::new(14.0 * k, 14.0 * k)), 4.0 * k, theme::LOGO_GRADIENT_A);
-    p.circle_filled(pt(6.5, 9.5), 3.2 * k, Color32::WHITE);
-    p.rect_filled(Rect::from_min_size(pt(8.9, 3.5), Vec2::new(1.8 * k, 9.2 * k)), 0.9 * k, Color32::WHITE);
-    p.circle_filled(pt(6.5, 9.5), 1.4 * k, theme::LOGO_GRADIENT_A);
+    p.rect_filled(Rect::from_min_size(o, Vec2::splat(size)), 4.0 * k, theme::LOGO_GRADIENT_A);
+    let stroke = egui::Stroke::new(1.6 * k, Color32::WHITE);
+    p.line_segment([pt(4.0, 12.0), pt(8.0, 4.0)], stroke);
+    p.line_segment([pt(8.0, 4.0), pt(12.0, 12.0)], stroke);
+    p.line_segment([pt(6.0, 9.0), pt(10.0, 9.0)], stroke);
 }
 
 #[cfg(test)]

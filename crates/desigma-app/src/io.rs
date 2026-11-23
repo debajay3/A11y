@@ -22,7 +22,7 @@ pub fn load_path_noted(path: &Path) -> Result<(Document, Vec<String>), String> {
 fn guard<T>(file: &str, load: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(load)).unwrap_or_else(|payload| {
         Err(format!(
-            "Cannot open {file}: desigma hit an internal error ({}). Details were saved to {}; please attach that file to a bug report.",
+            "Cannot open {file}: A11y hit an internal error ({}). Details were saved to {}; please attach that file to a bug report.",
             crate::crash::payload_message(payload.as_ref()),
             crate::crash::log_path().display()
         ))
@@ -97,12 +97,12 @@ pub fn pick_open() -> Option<PathBuf> {
         .add_filter("Pencil file", &["pen"])
         .add_filter("SVG", &["svg"])
         .add_filter("JSON", &["json"])
-        .add_filter("desigma", &[NATIVE_EXT])
+        .add_filter("A11y design", &[NATIVE_EXT])
         .pick_file()
 }
 
 pub fn pick_save(default_name: &str) -> Option<PathBuf> {
-    rfd::FileDialog::new().add_filter("desigma", &[NATIVE_EXT]).set_file_name(format!("{default_name}.{NATIVE_EXT}")).save_file()
+    rfd::FileDialog::new().add_filter("A11y design", &[NATIVE_EXT]).set_file_name(format!("{default_name}.{NATIVE_EXT}")).save_file()
 }
 
 pub fn pick_export(default_name: &str) -> Option<PathBuf> {
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn importer_panics_become_errors() {
         let err = guard("broken.fig", || -> Result<(), String> { panic!("index out of bounds") }).unwrap_err();
-        assert!(err.starts_with("Cannot open broken.fig: desigma hit an internal error (index out of bounds)"));
+        assert!(err.starts_with("Cannot open broken.fig: A11y hit an internal error (index out of bounds)"));
         assert!(err.contains("crash.log"));
         assert_eq!(guard("ok.fig", || Ok::<_, String>(3)), Ok(3));
     }

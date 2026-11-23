@@ -24,6 +24,7 @@ pub struct JoinUi {
     pub password: String,
     pub error: Option<String>,
     pub connecting: bool,
+    pub direct: bool,
     fresh: bool,
 }
 
@@ -40,7 +41,7 @@ impl App {
         }
         let name = self.author();
         let link = link.or_else(|| self.collab.pending_link.take()).unwrap_or_default();
-        self.collab.join = Some(JoinUi { link, name, password: String::new(), error: None, connecting: false, fresh: true });
+        self.collab.join = Some(JoinUi { link, name, password: String::new(), error: None, connecting: false, direct: false, fresh: true });
     }
 
     /// File → Share…: opens the popover under the Share button.
@@ -236,6 +237,7 @@ pub fn share_popover(app: &mut App, ctx: &Context) {
     let top = anchor.bottom() + 6.0;
     let rect = Rect::from_min_size(Pos2::new(x, top), Vec2::new(POP_W, h_last));
     let mut used = 0.0;
+    let mut publish = false;
     let mut close = false;
     let area = egui::Area::new(Id::new("collab-share")).order(Order::Foreground).fixed_pos(rect.min).constrain(false).show(ctx, |ui| {
         ui.allocate_rect(rect, Sense::click_and_drag());
@@ -247,6 +249,10 @@ pub fn share_popover(app: &mut App, ctx: &Context) {
         let mut y = rect.top() + 14.0;
         p.text(Pos2::new(x0, y + 10.0), Align2::LEFT_CENTER, crate::i18n::tr("Share"), theme::font_large_strong(), theme::TEXT);
         y += 32.0;
+        let publish_rect = Rect::from_min_size(Pos2::new(x0, y), Vec2::new(w, 30.0));
+        if button(ui, publish_rect, "publish-shared", "Publish to shared library", true, !app.collab.active()).clicked() { publish = true; }
+        y += 40.0;
+        paragraph(&p, x0, &mut y, w, "Publish once to keep the file available while your editor is closed. Or start a temporary session below.");
         if app.collab.hosting() {
             hosting_body(app, ui, &p, x0, w, &mut y);
         } else {
@@ -273,6 +279,12 @@ pub fn share_popover(app: &mut App, ctx: &Context) {
     }
     if close {
         app.collab.share.open = false;
+    }
+    if publish {
+        match app.doc.to_json() {
+            Ok(text) => { app.collab.share.open = false; app.publish_to_workspace(text); }
+            Err(e) => app.show_toast(e.to_string(), true),
+        }
     }
 }
 
@@ -561,7 +573,9 @@ pub fn join_dialog(app: &mut App, ctx: &Context) {
     }
     if submit && !j.link.trim().is_empty() && !j.name.trim().is_empty() {
         let name = j.name.trim().to_string();
-        match app.join_session(ctx, j.link.trim(), &name, &j.password) {
+        let result = if j.direct { app.join_session_network(ctx, j.link.trim(), &name, &j.password, desigma_net::Network::Direct) }
+        else { app.join_session(ctx, j.link.trim(), &name, &j.password) };
+        match result {
             Ok(()) => {
                 j.error = None;
                 j.connecting = true;

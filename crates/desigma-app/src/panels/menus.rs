@@ -222,7 +222,7 @@ pub fn run(app: &mut App, ctx: &Context, a: Action) {
             app.ui.menu = Some(MenuKind::Palette);
             app.ui.menu_anchor = None;
         }
-        Action::About => app.show_toast("desigma, a Figma-compatible design editor", false),
+        Action::About => app.show_toast("A11y (Ally), a collaborative design editor", false),
         Action::Plugins => app.open_plugins(),
         Action::BackToFiles => app.go_home(),
         Action::SaveToLibrary => app.begin_save_to_library(),
@@ -470,10 +470,10 @@ fn main_nodes(app: &App) -> Vec<Node> {
     let help = vec![
         leaf("Command palette", "Ctrl+K", Action::OpenPalette),
         leaf("Keyboard shortcuts", "", Action::Shortcuts).sep(),
-        leaf("About desigma", "", Action::AboutDesigma),
+        leaf("About A11y", "", Action::AboutDesigma),
         leaf(&format!("Version {}", crate::VERSION), "", Action::About).off(true),
         leaf("Check for updates…", "", Action::CheckForUpdates),
-        leaf("desigma on GitHub", "", Action::OpenGithub),
+        leaf("Upstream source on GitHub", "", Action::OpenGithub),
     ];
     vec![
         leaf("Back to files", "", Action::BackToFiles).sep(),

@@ -172,7 +172,7 @@ impl App {
 
     pub fn show_about(&mut self) {
         let mut lines = vec![
-            ("desigma is a free, open-source design editor written in Rust.".to_string(), String::new()),
+            ("A11y (pronounced Ally) is a collaborative design editor based on desigma.".to_string(), String::new()),
             (
                 if crate::RELEASE_BUILD {
                     format!("Version {}", crate::VERSION)
@@ -181,12 +181,12 @@ impl App {
                 },
                 String::new(),
             ),
-            ("There are no accounts, plans or cloud. Your files stay on this computer.".to_string(), String::new()),
+            ("Local files stay on this computer. Shared files are saved on your workspace server.".to_string(), String::new()),
         ];
         if let Some(lib) = &self.lib {
             lines.push((format!("Library: {}", lib.root().display()), String::new()));
         }
-        self.dialog = Some(Dialog::info(Intent::About, "About desigma", lines));
+        self.dialog = Some(Dialog::info(Intent::About, "About A11y", lines));
     }
 
     pub fn confirm_open_github(&mut self) {
