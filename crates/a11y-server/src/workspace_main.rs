@@ -191,7 +191,10 @@ fn run() -> Result<(), String> {
                         if bytes.len() > MAX_UPLOAD + 1024 * 1024 {
                             return Err("Upload too large".into());
                         }
-                        let input: PublishFile = serde_json::from_slice(&bytes).map_err(|_| "Invalid publish request".to_string())?;
+                        let mut input: PublishFile = serde_json::from_slice(&bytes).map_err(|_| "Invalid publish request".to_string())?;
+                        // Authorize the exact project name the store will persist.
+                        // Blank input is the default project, not an unrestricted resource.
+                        input.project = if input.project.trim().is_empty() { "Shared project".into() } else { input.project.trim().into() };
                         let db = accounts.lock().map_err(|_| "Accounts unavailable")?;
                         if db.access(&token, "", input.project.trim())? != "editor" {
                             return Err("Editor access to this project is required".into());
