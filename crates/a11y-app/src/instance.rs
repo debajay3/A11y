@@ -52,7 +52,7 @@ struct Discovery {
 
 /// Where the discovery file lives: the per-user runtime dir on Linux, else the local data dir.
 pub fn default_dir() -> PathBuf {
-    dirs::runtime_dir().or_else(dirs::data_local_dir).unwrap_or_else(std::env::temp_dir).join("a11y")
+    dirs::runtime_dir().or_else(dirs::data_local_dir).unwrap_or_else(std::env::temp_dir).join(a11y_library::APP_DATA_DIR)
 }
 
 /// A `a11y://join/...` link without control characters and of a sane length.
@@ -62,6 +62,27 @@ pub fn valid_link(link: &str) -> bool {
             .iter()
             .any(|prefix| link.len() > prefix.len() && link.get(..prefix.len()).is_some_and(|p| p.eq_ignore_ascii_case(prefix)))
         && !link.chars().any(char::is_control)
+}
+
+/// A `a11y://open` link, optionally with a fragment or query (e.g. what an
+/// embedding host appends): hands the running app the foreground only. The
+/// remainder is never interpreted or logged.
+pub fn is_open_link(link: &str) -> bool {
+    if link.len() > MAX_LINE || link.chars().any(char::is_control) {
+        return false;
+    }
+    if !link.get(.."a11y://open".len()).is_some_and(|p| p.eq_ignore_ascii_case("a11y://open")) {
+        return false;
+    }
+    let rest = &link["a11y://open".len()..];
+    rest.is_empty() || rest.starts_with('#') || rest.starts_with('?')
+}
+
+/// Human-readable rejection for a `a11y://` link that is neither a join
+/// link nor an open link, capped so a hostile URL cannot flood the toast.
+pub fn unsupported_link_message(link: &str) -> String {
+    let cleaned: String = link.chars().filter(|c| !c.is_control()).take(80).collect();
+    format!("Unsupported link: {cleaned}")
 }
 
 /// Checks the token and parses one protocol line (without its newline).
@@ -77,7 +98,7 @@ fn parse_line(line: &str, token: &str) -> Result<Request, &'static str> {
         return Ok(Request::Ping);
     }
     if let Some(link) = rest.strip_prefix("open-link ") {
-        return if valid_link(link) { Ok(Request::Open(Open::Link(link.to_string()))) } else { Err("not a a11y link") };
+        return if valid_link(link) || is_open_link(link) { Ok(Request::Open(Open::Link(link.to_string()))) } else { Err("not a a11y link") };
     }
     if let Some(path) = rest.strip_prefix("open-file ") {
         let path = Path::new(path);
@@ -238,7 +259,7 @@ fn send(d: &Discovery, command: &str) -> bool {
 pub fn forward(dir: &Path, open: &Open) -> bool {
     let Some(d) = read_discovery(dir) else { return false };
     match open {
-        Open::Link(l) if valid_link(l) => send(&d, &format!("open-link {l}")),
+        Open::Link(l) if valid_link(l) || is_open_link(l) => send(&d, &format!("open-link {l}")),
         Open::File(p) => {
             // the running editor has another working directory
             let Ok(abs) = std::path::absolute(p) else { return false };
@@ -274,10 +295,29 @@ mod tests {
     fn links_are_case_insensitive_and_files_must_be_absolute() {
         assert!(valid_link("A11Y://join/abc"));
         assert!(!valid_link("a11y://open/abc"));
+        assert!(is_open_link("a11y://open"));
+        assert!(is_open_link("A11Y://OPEN#identity_token=abc"));
+        assert!(is_open_link("a11y://open?from=shell"));
+        assert!(!is_open_link("a11y://openx"));
+        assert!(!is_open_link("a11y://open/abc"));
+        assert!(!is_open_link("a11y://join/abc"));
+        assert!(!is_open_link(&format!("a11y://open#{}", "a".repeat(MAX_LINE))));
+        assert_eq!(parse_line("tok open-link a11y://open", "tok"), Ok(Request::Open(Open::Link("a11y://open".into()))));
+        assert_eq!(parse_line("tok open-link a11y://open#frag", "tok"), Ok(Request::Open(Open::Link("a11y://open#frag".into()))));
+        assert_eq!(parse_line("tok open-link a11y://openx", "tok"), Err("not a a11y link"));
         assert!(!valid_link("a11y://"));
         let abs = std::env::temp_dir().join("a b.a11y");
         assert_eq!(parse_line(&format!("tok open-file {}", abs.display()), "tok"), Ok(Request::Open(Open::File(abs))));
         assert_eq!(parse_line("tok open-file relative.a11y", "tok"), Err("not an absolute path"));
+    }
+
+    #[test]
+    fn unsupported_link_messages_are_sanitized_and_capped() {
+        assert_eq!(unsupported_link_message("a11y://weird/x"), "Unsupported link: a11y://weird/x");
+        let long = format!("a11y://{}", "a".repeat(200));
+        let msg = unsupported_link_message(&long);
+        assert_eq!(msg.chars().count(), "Unsupported link: ".len() + 80);
+        assert_eq!(unsupported_link_message("a11y://a\u{7}b"), "Unsupported link: a11y://ab");
     }
 
     #[test]
@@ -302,6 +342,9 @@ mod tests {
         let file = Open::File(std::env::temp_dir().join("x.a11y"));
         assert!(forward(&dir, &file));
         assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), file);
+        let open = Open::Link("a11y://open".into());
+        assert!(forward(&dir, &open));
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), open);
         // a second editor does not take over
         assert!(Instance::start(&dir, |_| {}).unwrap().is_none());
         drop(inst);

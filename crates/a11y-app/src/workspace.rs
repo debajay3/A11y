@@ -5,7 +5,7 @@ use egui::{Context, Rect, Ui};
 use serde::{Deserialize, Serialize};
 use std::{
     io::Read,
-    path::Path,
+    path::{Path, PathBuf},
     sync::mpsc::{self, Receiver},
     time::Duration,
 };
@@ -22,6 +22,7 @@ enum Reply {
 }
 #[derive(Default)]
 pub struct Workspace {
+    settings_root: Option<PathBuf>,
     connection: Connection,
     pub catalog: Catalog,
     pub draft: Option<String>,
@@ -34,6 +35,7 @@ pub struct Workspace {
 }
 impl Workspace {
     pub fn load(&mut self, root: &Path) {
+        self.settings_root = Some(root.to_path_buf());
         self.connection = std::fs::read(root.join("a11y-workspace.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         self.catalog = std::fs::read(root.join("a11y-shared-cache.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         if self.connection.url.is_empty() {
@@ -156,9 +158,9 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect, search: &str) -> Option<(Str
                             }
                             Reply::Opened(link) => opened = Some(link),
                         }
-                        if let Some(lib) = &app.lib {
-                            if let Err(e) = save_private(lib.root(), "a11y-workspace.json", &w.connection)
-                                .and_then(|_| save_private(lib.root(), "a11y-shared-cache.json", &w.catalog))
+                        if let Some(root) = w.settings_root.as_deref() {
+                            if let Err(e) =
+                                save_private(root, "a11y-workspace.json", &w.connection).and_then(|_| save_private(root, "a11y-shared-cache.json", &w.catalog))
                             {
                                 w.error = Some(format!("Connected, but could not remember this workspace: {e}"));
                             }
@@ -313,5 +315,30 @@ mod tests {
             assert_eq!(std::fs::metadata(root.join("a11y-workspace.json")).unwrap().permissions().mode() & 0o777, 0o600);
         }
         std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn organizations_keep_the_shared_connection_across_switch_and_restart() {
+        let root = std::env::temp_dir().join(format!("a11y-org-shared-{}", a11y_library::new_id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let connection = Connection { url: "http://127.0.0.1:49180".into(), key: "test-only".into() };
+        save_private(&root, "a11y-workspace.json", &connection).unwrap();
+        let mut app = App::new(crate::demo::demo_document());
+        app.organizations = Some(a11y_library::organizations::Workspace::open(root.clone()).unwrap());
+        app.workspace.load(&root);
+        app.home = Some(crate::home::Home::new());
+        assert!(app.create_organization("Design team"));
+        assert!(app.workspace.configured());
+        assert_eq!(app.workspace.settings_root.as_deref(), Some(root.as_path()));
+        let team_root = app.lib.as_ref().unwrap().root().to_path_buf();
+        assert_ne!(team_root, root);
+        let mut restarted = App::new(crate::demo::demo_document());
+        let active = restarted.workspace_root(root.clone());
+        assert_eq!(active, team_root);
+        restarted.attach_library(active);
+        assert_eq!(restarted.workspace.connection.key, "test-only");
+        restarted.switch_organization(None);
+        assert_eq!(restarted.lib.as_ref().unwrap().root(), root);
+        assert!(restarted.workspace.configured());
+        let _ = std::fs::remove_dir_all(root);
     }
 }

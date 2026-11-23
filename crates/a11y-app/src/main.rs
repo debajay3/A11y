@@ -2,6 +2,7 @@
 // console programs. Tests keep the console too, so `cargo test --release` can still print.
 #![cfg_attr(all(windows, not(debug_assertions), not(test)), windows_subsystem = "windows")]
 
+mod aiimg;
 mod app;
 mod board;
 mod bridge;
@@ -14,6 +15,7 @@ mod comp_ops;
 mod crash;
 mod decks;
 mod demo;
+mod desktop;
 mod dev;
 mod edit;
 mod extwatch;
@@ -35,6 +37,7 @@ mod macos;
 mod mcp_link;
 mod motion;
 mod ops;
+mod organizations;
 mod panels;
 mod plugins;
 mod present;
@@ -156,7 +159,7 @@ fn main() {
     let (w, h) = opts.size.unwrap_or((theme::DEFAULT_WINDOW.0 as u32, theme::DEFAULT_WINDOW.1 as u32));
     let screenshot_mode = opts.screenshot.is_some();
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title(theme::APP_TITLE)
+        .with_title(theme::display_title())
         .with_inner_size([w as f32, h as f32])
         .with_min_inner_size([theme::MIN_WINDOW.0, theme::MIN_WINDOW.1]);
     if let Some(icon) = window_icon() {

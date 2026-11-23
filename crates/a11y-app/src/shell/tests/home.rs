@@ -436,3 +436,45 @@ fn publish_from_local_library_stages_a_copy_without_changing_the_original() {
     assert_eq!(s.app().workspace.draft.as_deref(), Some(before.as_str()));
     assert_eq!(lib(&s).load_file(&id).unwrap().to_json().unwrap(), before);
 }
+
+#[test]
+fn tabs_save_edits_restore_the_view_and_keep_cross_document_clipboard() {
+    let (mut s, _d) = home_sim();
+    let library = lib(&s);
+    let first = library.all_files()[0].clone();
+    let mut second_doc = Document::new("Second");
+    second_doc.add_page("Page 1");
+    let second = library.create_file(&first.project, None, "Second", &second_doc).unwrap();
+    s.shell.app.open_library_file(&first.id);
+    let layer = s.app().doc.get(s.app().page).unwrap().children[0];
+    s.shell.app.rename(layer, "Retained edit");
+    s.shell.app.select_only(layer);
+    s.shell.app.copy_selection().unwrap();
+    s.shell.app.view.zoom = 0.73;
+    s.shell.app.open_library_file(&second.id);
+    assert_eq!(library.load_file(&first.id).unwrap().get(layer).unwrap().name, "Retained edit");
+    s.shell.app.paste(None);
+    assert!(!s.app().selection.is_empty());
+    s.shell.app.open_library_file(&first.id);
+    assert_eq!(s.app().selection, vec![layer]);
+    assert_eq!(s.app().view.zoom, 0.73);
+}
+
+#[test]
+fn tab_switch_does_not_leave_a_document_when_saving_fails() {
+    let (mut s, _d) = home_sim();
+    let library = lib(&s);
+    let first = library.all_files()[0].clone();
+    let mut second_doc = Document::new("Second");
+    second_doc.add_page("Page 1");
+    let second = library.create_file(&first.project, None, "Second", &second_doc).unwrap();
+    s.shell.app.open_library_file(&first.id);
+    let layer = s.app().doc.get(s.app().page).unwrap().children[0];
+    s.shell.app.rename(layer, "Unsaved edit");
+    let path = library.root().join("projects").join(&first.project).join("files").join(format!("{}.desigma", first.id));
+    std::fs::remove_file(&path).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    s.shell.app.open_library_file(&second.id);
+    assert_eq!(s.app().lib_file.as_ref().unwrap().id, first.id);
+    assert_eq!(s.app().doc.get(layer).unwrap().name, "Unsaved edit");
+}

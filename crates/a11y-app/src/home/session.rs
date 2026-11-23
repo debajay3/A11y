@@ -1,7 +1,7 @@
 //! The editor's link to the library: which library file is open, saving,
 //! debounced autosave and thumbnails.
 
-use super::{thumb, Home, Section};
+use super::{thumb, Section};
 use crate::app::App;
 use a11y_doc::{Document, DocumentKind};
 use a11y_library::Library;
@@ -60,7 +60,7 @@ impl App {
     pub fn attach_library(&mut self, root: PathBuf) {
         // Shared libraries use the same root as the projects library.
         self.libs.set_root(root.clone());
-        self.workspace.load(&root);
+        self.workspace.load(self.organizations.as_ref().map_or(root.as_path(), |org| org.local_root()));
         match Library::open(&root) {
             Ok(lib) => {
                 match lib.seed_first_run(crate::demo::demo_document) {
@@ -74,6 +74,7 @@ impl App {
                     Err(e) => self.show_toast(format!("Could not create the sample project: {e}"), true),
                 }
                 self.lib = Some(lib);
+                self.load_ai_settings();
             }
             Err(e) => self.show_toast(format!("Cannot open the library at {}: {e}", root.display()), true),
         }
@@ -88,14 +89,28 @@ impl App {
             self.show_toast("The projects library is unavailable", true);
             return;
         };
+        if !self.save_before_tab_change() {
+            return;
+        }
+        self.capture_tab_view();
+        self.ai_cancel();
         crate::decks::ui::flush_notes(self);
         self.save_close_version();
         self.stop_plugin();
         self.flush_autosave();
         self.end_collab();
         self.canvas.reset_interaction();
-        let mut home = Home::new();
-        if self.workspace.configured() {
+        let previous = if cfg!(feature = "enhanced-desktop") { self.home.take().or_else(|| self.parked_home.take()) } else { None };
+        let has_previous = previous.is_some();
+        let mut home = previous.unwrap_or_default();
+        if self.organizations.is_some() && !has_previous {
+            home.section = self
+                .lib_file
+                .as_ref()
+                .and_then(|file| lib.file(&file.id).ok())
+                .map_or(Section::Projects, |entry| Section::Project(entry.project, entry.folder));
+        }
+        if self.workspace.configured() && !has_previous {
             home.section = super::Section::Shared;
         }
         home.refresh(&lib);
@@ -111,6 +126,10 @@ impl App {
             return;
         }
         let Some(lib) = self.lib.clone() else { return };
+        if !self.save_before_tab_change() {
+            return;
+        }
+        self.capture_tab_view();
         let loaded = lib.file(id).and_then(|e| lib.load_file(id).map(|d| (e, d)));
         let (entry, mut doc) = match loaded {
             Ok(x) => x,
@@ -127,7 +146,15 @@ impl App {
         self.autosave = Autosave { seen_rev: self.canvas.tiles.rev(), saved_hash: doc_hash(&self.doc), ..Default::default() };
         self.history_open_file();
         let _ = lib.mark_opened(id);
-        self.home = None;
+        if cfg!(feature = "enhanced-desktop") {
+            if self.home.is_some() {
+                self.parked_home = self.home.take();
+            }
+            self.remember_document_tab();
+            self.restore_tab_view(id);
+        } else {
+            self.home = None;
+        }
         self.ui.menu = None;
         if needs_thumb {
             thumb::refresh_in_background(lib, entry.id, self.export_doc().into_owned());
@@ -242,6 +269,17 @@ impl App {
             }
             Err(e) => self.show_toast(e, true),
         }
+    }
+
+    /// Keep the current tab open if a workspace document cannot be saved.
+    fn save_before_tab_change(&mut self) -> bool {
+        if cfg!(feature = "enhanced-desktop") && self.home.is_none() && self.lib_file.is_some() && self.history.viewing.is_none() {
+            if let Err(error) = self.write_library_file(true) {
+                self.show_toast(error, true);
+                return false;
+            }
+        }
+        true
     }
 
     /// Saves pending edits right away (before leaving the editor or the app).

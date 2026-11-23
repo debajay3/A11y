@@ -61,6 +61,15 @@ pub enum Action {
     ResetInstance,
     Copy,
     Paste,
+    PasteHere,
+    ToggleCommentPins,
+    CopyFormat(super::export::CopyKind),
+    MoveToPage(a11y_doc::NodeId),
+    ShowHide,
+    LockUnlock,
+    Flip(bool),
+    UseAsMask,
+    OpenMotion,
     TogglePixelGrid,
     ToggleRulers,
     ToggleLayoutGrids,
@@ -101,6 +110,7 @@ pub enum Action {
     ToggleVersionHistory,
     /// Ctrl+Alt+S: save a named version.
     SaveVersion,
+    Mcp,
     /// Preferences -> Your name.
     YourName,
     /// Preferences -> Use GPU rendering.
@@ -109,8 +119,12 @@ pub enum Action {
     ToggleUpdateCheck,
     /// Preferences -> Allow MCP agents to control this editor.
     ToggleAgentBridge,
-    /// Preferences -> Claude…: register the installed MCP server with Claude.
-    Mcp,
+    /// Preferences -> AI images…: the OpenRouter key and the image model.
+    AiSettings,
+    /// Object -> Generate image…
+    AiGenerate,
+    /// Object -> Edit image with AI…
+    AiEdit,
     /// Preferences -> Language -> ...
     SetLanguage(crate::i18n::Lang),
     /// Help -> Check for updates.
@@ -181,7 +195,37 @@ pub fn run(app: &mut App, ctx: &Context, a: Action) {
                 ctx.copy_text(s);
             }
         }
+        Action::ToggleCommentPins => {
+            app.comments.pins_hidden = !app.comments.pins_hidden;
+            app.comments.close_popovers();
+        }
+        Action::PasteHere => crate::clipboard::external::paste(app, None),
+        Action::Paste if cfg!(feature = "enhanced-desktop") => crate::clipboard::external::paste(app, None),
         Action::Paste => app.paste(None),
+        Action::CopyFormat(kind) => {
+            if let [id] = app.selection.as_slice() {
+                super::export::copy_as(app, *id, kind);
+            }
+        }
+        Action::MoveToPage(page) => {
+            if page != app.page && app.doc.pages.contains(&page) {
+                let ids = app.top_selection();
+                let index = app.doc.get(page).map_or(0, |node| node.children.len());
+                app.move_to_parent(&ids, page, index);
+                app.selection.retain(|id| app.doc.page_of(*id) == Some(app.page));
+            }
+        }
+        Action::ShowHide | Action::LockUnlock | Action::UseAsMask => {
+            let ids = app.selection.clone();
+            app.edit_nodes(&ids, |node| match a {
+                Action::ShowHide => node.visible = !node.visible,
+                Action::LockUnlock => node.locked = !node.locked,
+                Action::UseAsMask => node.is_mask = !node.is_mask,
+                _ => {}
+            });
+        }
+        Action::Flip(horizontal) => app.flip_selection(horizontal),
+        Action::OpenMotion => app.motion.enabled = true,
         Action::TogglePixelGrid => app.ui.pixel_grid = !app.ui.pixel_grid,
         Action::ToggleRulers => app.ui.rulers = !app.ui.rulers,
         Action::ToggleLayoutGrids => app.ui.hide_layout_grids = !app.ui.hide_layout_grids,
@@ -222,6 +266,10 @@ pub fn run(app: &mut App, ctx: &Context, a: Action) {
             app.ui.menu = Some(MenuKind::Palette);
             app.ui.menu_anchor = None;
         }
+        Action::Mcp => {
+            app.mcp_error = None;
+            app.mcp_dialog = true;
+        }
         Action::About => app.show_toast("A11y (Ally), a collaborative design editor", false),
         Action::Plugins => app.open_plugins(),
         Action::BackToFiles => app.go_home(),
@@ -231,13 +279,12 @@ pub fn run(app: &mut App, ctx: &Context, a: Action) {
         Action::ToggleVersionHistory => app.toggle_version_history(),
         Action::SaveVersion => app.begin_save_version(),
         Action::YourName => app.ask_author_name(),
+        Action::AiSettings => app.open_ai_settings(ctx, None),
+        Action::AiGenerate => app.open_ai_generate(ctx),
+        Action::AiEdit => app.open_ai_edit(ctx),
         Action::ToggleGpu => app.toggle_gpu(),
         Action::ToggleUpdateCheck => app.toggle_update_check(),
         Action::ToggleAgentBridge => app.toggle_agent_bridge(ctx),
-        Action::Mcp => {
-            app.mcp_error = None;
-            app.mcp_dialog = true;
-        }
         Action::SetLanguage(lang) => app.set_language(lang),
         Action::CheckForUpdates => app.check_for_updates(ctx, true),
         Action::Shortcuts => app.show_shortcuts(),
@@ -424,7 +471,9 @@ fn main_nodes(app: &App) -> Vec<Node> {
         leaf("Bring to front", "Ctrl+Shift+]", Action::BringToFront).off(!has_sel),
         leaf("Bring forward", "Ctrl+]", Action::BringForward).off(!has_sel),
         leaf("Send backward", "Ctrl+[", Action::SendBackward).off(!has_sel),
-        leaf("Send to back", "Ctrl+Shift+[", Action::SendToBack).off(!has_sel),
+        leaf("Send to back", "Ctrl+Shift+[", Action::SendToBack).off(!has_sel).sep(),
+        leaf("Generate image…", "", Action::AiGenerate),
+        leaf("Edit image with AI…", "", Action::AiEdit).off(app.ai_editable().is_none()),
     ];
     let text = vec![
         leaf("Bold", "Ctrl+B", Action::TextBold).off(!has_text),
@@ -497,6 +546,7 @@ fn main_nodes(app: &App) -> Vec<Node> {
                     .on(crate::RELEASE_BUILD && !app.updater.no_auto_check)
                     .off(!crate::RELEASE_BUILD),
                 leaf("Claude…", "", Action::Mcp),
+                leaf("AI images…", "", Action::AiSettings),
                 leaf("Allow MCP agents to control this editor", "", Action::ToggleAgentBridge).on(app.bridge.bridge.is_some()),
                 submenu(
                     "Language",

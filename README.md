@@ -227,6 +227,20 @@ cargo run -p a11y-app -- --export-animation onboarding.a11y --out onboarding.gif
 
 Motion follows the workflow of Figma's Motion (Beta) mode but is a11y's own implementation, and it is not affiliated with Figma, Inc. Animation data lives in `.a11y` files and in a11y's REST JSON export; it cannot be written back into `.fig` files.
 
+## AI images (beta)
+
+Generate images, or regenerate part of one, without leaving the canvas. a11y has no AI service of its own: it uses **your own [OpenRouter](https://openrouter.ai) key** and the image model you pick, at your cost.
+
+![Edit image with AI: the sky of a photo selected, with a prompt](docs/images/a11y-ai-edit.png)
+
+- **Preferences → AI images…**: paste your OpenRouter API key and choose a model from OpenRouter's list. The key is stored in the system keychain (Windows Credential Manager, macOS Keychain, Secret Service on Linux), never in a file or a document.
+- **Generate image…** (Object menu or right-click): describe the image and pick a ratio. Selected layers are sent as reference images; a selected empty rectangle, ellipse or frame is filled with the result.
+- **Edit image with AI…**: select a layer with an image fill, paint over the part to change with a brush and say what should change. Only what you painted is taken from the model's answer, so the rest of the picture stays pixel for pixel the same. With nothing painted the whole picture is regenerated.
+- **Versions**: every generation is remembered on its layer with its prompt, and saved in the file. Click an earlier picture in the dialog to bring it back.
+- While a request runs, the place the image will appear glows on the canvas. One generation is one Undo step.
+
+Your prompt and the reference images go to OpenRouter and the model's provider; nothing is sent until you press **Generate**. Details: [docs/ai-images.md](docs/ai-images.md).
+
 ## Live collaboration (beta)
 
 Click **Share** in the editor, copy the `a11y://join/…` link and send it. Anyone with the link opens it (or pastes it into **Join session** on the home screen) and edits the same file with you, live, on Windows, macOS or Linux. There is no account and no server: your copy of a11y hosts the session while the file stays open.
@@ -358,7 +372,7 @@ a11y-diff compare reference.png actual.png --out diff.png   # pixel-compare two 
 
 ## MCP integration
 
-Build the local server with `cargo build --locked -p a11y-mcp`, then configure your MCP client to launch `a11y-mcp --workspace /path/to/designs`. It provides 16 tools for importing files, inspecting layers and tokens, generating code, editing with undo/redo, and saving a new `.a11y` file. With the editor's agent bridge on (Preferences → **Allow MCP agents to control this editor**, or launch with `a11y --bridge`), the same tools edit the document that is open on screen and share its Undo; a status pill shows while the bridge is on. Without a running editor the server works on an isolated file session as before. See the [setup and tool reference](crates/a11y-mcp/README.md).
+Build the local server with `cargo build --locked -p a11y-mcp`, then configure your MCP client to launch `a11y-mcp --workspace /path/to/designs`. It provides 32 tools for importing files, inspecting layers and tokens, generating code, editing with undo/redo (layers, pages, components and instances, motion), and saving `.a11y` files. With the editor's agent bridge on (Preferences → **Allow MCP agents to control this editor**, or launch with `a11y --bridge`), the same tools edit the document that is open on screen and share its Undo; a status pill shows while the bridge is on. Without a running editor the server works on an isolated file session as before. See the [setup and tool reference](crates/a11y-mcp/README.md), and [how an agent drives it](docs/agent-workflows.md) for workspace conventions, when to generate code instead of reading the node tree, and an example document.
 
 ## Native plugin installation
 
@@ -402,3 +416,12 @@ wire protocol remain compatible with the earlier test builds. New installations 
 
 Original upstream copyright and trademark notices are retained in LICENSE-MIT and TRADEMARKS.md.
 Those notices describe the upstream project, not A11y ownership.
+
+## Reviewed handoff additions
+
+The default desktop build now includes document tabs, local organization/project navigation,
+expanded clipboard handling, inline frame renaming, and optional AI image tools. Existing
+shared libraries, board creation, and the MCP connection screen remain available.
+See the [integration review and verification notes](docs/reviews/a11y-handoff-2026-11-23.md)
+for the imported functionality, compatibility fixes, and deployment checks. Local organization
+folders do not yet enforce authenticated team permissions on the shared server.

@@ -146,6 +146,11 @@ impl Shell {
             crate::vecfixture::apply(&mut app, f);
         }
         if let Some(root) = opts.library.clone() {
+            let root = if cfg!(feature = "enhanced-desktop") && opts.open_id.is_none() && root == a11y_library::Library::default_root() {
+                app.workspace_root(root)
+            } else {
+                root
+            };
             app.attach_library(root);
         }
         if let Some(f) = &opts.file {
@@ -270,6 +275,7 @@ impl Shell {
             Some("version-history") => crate::history::preset::apply(&mut app, opts.library.clone()),
             Some(p @ ("motion-inspector" | "motion-easing" | "motion-library" | "motion-clip")) => crate::motion::inspector::preset(&mut app, p),
             Some(p @ ("dev-annotate" | "dev-compare")) => crate::dev::preset::panel(&mut app, p),
+            Some(p @ ("ai-settings" | "ai-generate" | "ai-edit" | "ai-running")) => crate::aiimg::preset(&mut app, ctx, p),
             Some("share") => app.open_share(),
             Some("collab") => crate::collab::preview(&mut app),
             Some(p @ ("updater" | "updater-banner")) => crate::updater::preset(&mut app, p),
@@ -381,6 +387,8 @@ impl Shell {
             return;
         }
         let events = ctx.input(|i| i.events.clone());
+        let copy_event = events.iter().any(|event| matches!(event, Event::Copy));
+        let paste_event = events.iter().any(|event| matches!(event, Event::Paste(_)));
         for ev in events {
             match ev {
                 Event::Copy if !editing_text && crate::motion::timeline::copy_keys(&mut self.app, ctx) => {}
@@ -395,7 +403,33 @@ impl Shell {
                         ctx.copy_text(s);
                     }
                 }
-                Event::Paste(s) if !editing_text => self.app.paste(Some(&s)),
+                Event::Paste(s) if !editing_text => {
+                    if cfg!(feature = "enhanced-desktop") {
+                        crate::clipboard::external::paste(&mut self.app, Some(&s));
+                    } else {
+                        self.app.paste(Some(&s));
+                    }
+                }
+                // Some platforms only deliver the key when no clipboard event was generated.
+                Event::Key { key: Key::C, pressed: true, repeat: false, modifiers, .. }
+                    if !editing_text && modifiers.command && !modifiers.shift && !modifiers.alt && !copy_event =>
+                {
+                    if !crate::motion::timeline::copy_keys(&mut self.app, ctx) {
+                        menus::run(&mut self.app, ctx, Action::Copy);
+                    }
+                }
+                Event::Key { key: Key::V, pressed: true, repeat: false, modifiers, .. }
+                    if !editing_text && modifiers.command && !modifiers.shift && !modifiers.alt && !paste_event =>
+                {
+                    if !crate::motion::timeline::paste_keys(&mut self.app, ctx) {
+                        if cfg!(feature = "enhanced-desktop") {
+                            crate::clipboard::external::paste(&mut self.app, None);
+                        } else {
+                            let text = arboard::Clipboard::new().and_then(|mut clipboard| clipboard.get_text()).ok();
+                            self.app.paste(text.as_deref());
+                        }
+                    }
+                }
                 Event::Key { key, pressed: true, modifiers, .. } => {
                     if editing_text {
                         continue;
@@ -558,6 +592,7 @@ impl Shell {
             Key::Num1 if m.shift => menus::run(app, ctx, Action::FitAll),
             Key::Num2 if m.shift => menus::run(app, ctx, Action::FitSelection),
             Key::Num0 if m.shift => menus::run(app, ctx, Action::Zoom100),
+            Key::C if m.shift && cfg!(feature = "enhanced-desktop") => menus::run(app, ctx, Action::ToggleCommentPins),
             Key::A if m.shift => menus::run(app, ctx, Action::AutoLayout),
             Key::R if m.shift => menus::run(app, ctx, Action::ToggleRulers),
             Key::Quote if m.shift => menus::run(app, ctx, Action::TogglePixelGrid),
@@ -649,6 +684,7 @@ impl eframe::App for Shell {
         self.app.poll_bridge();
         self.handle_opens(ctx);
         crate::collab::pump(&mut self.app, ctx);
+        crate::aiimg::pump(&mut self.app);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -671,7 +707,12 @@ impl Shell {
         }
         for open in opens {
             match open {
-                crate::instance::Open::Link(link) => self.app.request_open(crate::instance::Open::Link(link)),
+                // `a11y://open` (optionally with a fragment): embedding hosts use it to
+                // hand the running app the foreground; nothing is opened or interpreted.
+                crate::instance::Open::Link(link) if crate::instance::is_open_link(&link) => {}
+                // Not a join or open link: say so instead of dropping it silently (#67).
+                crate::instance::Open::Link(link) if crate::instance::valid_link(&link) => self.app.request_open(crate::instance::Open::Link(link)),
+                crate::instance::Open::Link(link) => self.app.show_toast(crate::instance::unsupported_link_message(&link), true),
                 crate::instance::Open::File(path) => self.app.request_open(crate::instance::Open::File(path)),
             }
         }
@@ -717,7 +758,7 @@ impl Shell {
     }
 
     fn sync_title(&mut self, ctx: &Context) {
-        let title = if self.app.home.is_some() { theme::APP_TITLE.to_string() } else { self.app.title() };
+        let title = if self.app.home.is_some() { theme::display_title().to_string() } else { self.app.title() };
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -735,10 +776,12 @@ impl Shell {
         }
         crate::home::show(&mut self.app, ui);
         crate::home::dialog::show(&mut self.app, ctx);
-        crate::mcp_link::show(&mut self.app, ctx);
         crate::collab::ui::join_dialog(&mut self.app, ctx);
+        crate::mcp_link::show(&mut self.app, ctx);
         crate::unsaved::dialog(&mut self.app, ctx);
         crate::extwatch::dialog(&mut self.app, ctx);
+        crate::aiimg::ui::settings_dialog(&mut self.app, ctx);
+        crate::aiimg::ui::prompt_dialog(&mut self.app, ctx);
         let full = ui.max_rect();
         self.toast(ui, full);
         self.sync_title(ctx);
@@ -760,6 +803,22 @@ impl Shell {
             crate::updater::install::run_stashed();
         }
         self.app.scrub_sync(&ctx);
+        let mut body;
+        let ui = if cfg!(feature = "enhanced-desktop") && self.app.lib.is_some() && self.app.proto.present.is_none() {
+            let full = ui.max_rect();
+            let bottom = full.top() + crate::desktop::tabs::HEIGHT;
+            let header = Rect::from_min_max(full.min, Pos2::new(full.right(), bottom));
+            if self.app.dialog.is_some() {
+                // Dialogs must own focus and prevent tab actions.
+                ui.painter().rect_filled(header, 0.0, theme::BG_SECONDARY);
+            } else {
+                crate::desktop::tabs::show(&mut self.app, ui, header);
+            }
+            body = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(Pos2::new(full.left(), bottom), full.max)));
+            &mut body
+        } else {
+            ui
+        };
         if self.app.home.is_some() {
             self.home_frame(ui, &ctx);
             crate::plugins::ui::show(&mut self.app, &ctx);
@@ -869,12 +928,14 @@ impl Shell {
         crate::plugins::ui::show(&mut self.app, &ctx);
         crate::updater::ui::show(&mut self.app, &ctx);
         crate::bridge::ui::show(&mut self.app, &ctx);
-        crate::mcp_link::show(&mut self.app, &ctx);
         crate::collab::ui::share_popover(&mut self.app, &ctx);
         crate::collab::ui::requests(&mut self.app, &ctx);
         crate::collab::ui::join_dialog(&mut self.app, &ctx);
+        crate::mcp_link::show(&mut self.app, &ctx);
         crate::unsaved::dialog(&mut self.app, &ctx);
         crate::extwatch::dialog(&mut self.app, &ctx);
+        crate::aiimg::ui::settings_dialog(&mut self.app, &ctx);
+        crate::aiimg::ui::prompt_dialog(&mut self.app, &ctx);
         self.toast(ui, full);
 
         self.sync_title(&ctx);

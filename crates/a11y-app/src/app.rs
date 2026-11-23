@@ -151,11 +151,14 @@ pub struct App {
     pub startup_zoom: Option<f32>,
     /// The projects library (None until opened; tests run without one).
     pub lib: Option<a11y_library::Library>,
+    pub(crate) desktop_tabs: crate::desktop::tabs::Tabs,
+    pub(crate) organizations: Option<a11y_library::organizations::Workspace>,
     /// The library file open in the editor, if any (autosaved, shown in the header).
     pub lib_file: Option<crate::home::LibFile>,
     /// Some while the home screen (file browser) is showing instead of the editor.
     pub home: Option<crate::home::Home>,
     pub workspace: crate::workspace::Workspace,
+    pub(crate) parked_home: Option<crate::home::Home>,
     /// The open modal dialog (prompts, confirmations, shortcuts, About).
     pub dialog: Option<crate::home::Dialog>,
     pub autosave: crate::home::Autosave,
@@ -182,6 +185,8 @@ pub struct App {
     pub file_hash: Option<u64>,
     /// An open waiting for the answer to "Discard unsaved changes?".
     pub pending_open: Option<crate::instance::Open>,
+    /// AI images: the OpenRouter settings, the open dialog and running requests (see `aiimg`).
+    pub ai: crate::aiimg::AiState,
     /// Watching the open file for changes made by other programs (see `extwatch.rs`).
     pub ext_watch: Option<crate::extwatch::Watch>,
 }
@@ -224,9 +229,12 @@ impl App {
             scrub: None,
             startup_zoom: None,
             lib: None,
+            organizations: None,
+            desktop_tabs: Default::default(),
             lib_file: None,
             home: None,
             workspace: Default::default(),
+            parked_home: None,
             dialog: None,
             autosave: Default::default(),
             renaming_file: false,
@@ -241,6 +249,7 @@ impl App {
             collab: Default::default(),
             file_hash: None,
             pending_open: None,
+            ai: Default::default(),
             ext_watch: None,
         }
     }
@@ -312,7 +321,7 @@ impl App {
 
     pub fn title(&self) -> String {
         let name = if self.doc.name.is_empty() { "Untitled" } else { &self.doc.name };
-        format!("{name} - {}", theme::APP_TITLE)
+        format!("{name} - {}", theme::display_title())
     }
 }
 

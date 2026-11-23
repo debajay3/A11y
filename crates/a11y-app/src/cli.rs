@@ -5,7 +5,8 @@ use std::path::PathBuf;
 #[derive(Debug, Default, PartialEq)]
 pub struct Options {
     pub file: Option<PathBuf>,
-    /// A `a11y://join/...` link: opens the Join session dialog with it filled in.
+    /// A `a11y://join/...` link (opens the Join session dialog with it filled in)
+    /// or a plain `a11y://open` (focuses the app; nothing is opened).
     pub join: Option<String>,
     pub screenshot: Option<PathBuf>,
     pub size: Option<(u32, u32)>,
@@ -92,7 +93,11 @@ impl Options {
 /// Values of `--panel`: `variables` / `variables-floating` open the local variables view,
 /// `libraries` the Libraries modal, `updater` / `updater-banner` check the update feed (`A11Y_UPDATE_URL`)
 /// and show the update dialog or banner; the others are inspector popups opened on the selection for screenshots.
-pub const PANELS: [&str; 28] = [
+pub const PANELS: [&str; 32] = [
+    "ai-running",
+    "ai-settings",
+    "ai-generate",
+    "ai-edit",
     "share",
     "collab",
     "plugins",
@@ -281,8 +286,9 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
     Ok(o)
 }
 
-pub const USAGE: &str = "usage: a11y [FILE|a11y://join/LINK] [--screenshot OUT.png] [--size WxH] [--scale FACTOR] [--select LAYER|none] [--menu main|main/File|shape|palette] [--panel interaction|present-variables|variables|variables-floating|libraries|picker|picker-page|fill-d9|picker-gradient|effects-menu|stroke-settings|type-details|effect-noise|effect-texture|effect-glass|version-history|dev-annotate|dev-compare|motion-inspector|motion-easing|motion-library|motion-clip|updater|updater-banner|share|collab]\n               [--zoom PERCENT] [--rulers] [--grid] [--gpu] [--bridge] [--home] [--library DIR] [--layout-grid grid|columns|rows] [--edit-text LAYER [--select-text START-END]]\n  FILE  .fig, .pen (Pencil), .json (Figma REST or native), .svg or .a11y; without a file the projects home screen opens
+pub const USAGE: &str = "usage: a11y [FILE|a11y://join/LINK|a11y://open] [--screenshot OUT.png] [--size WxH] [--scale FACTOR] [--select LAYER|none] [--menu main|main/File|shape|palette] [--panel interaction|present-variables|variables|variables-floating|libraries|picker|picker-page|fill-d9|picker-gradient|effects-menu|stroke-settings|type-details|effect-noise|effect-texture|effect-glass|version-history|dev-annotate|dev-compare|motion-inspector|motion-easing|motion-library|motion-clip|updater|updater-banner|share|collab|ai-settings|ai-generate|ai-edit|ai-running]\n               [--zoom PERCENT] [--rulers] [--grid] [--gpu] [--bridge] [--home] [--library DIR] [--layout-grid grid|columns|rows] [--edit-text LAYER [--select-text START-END]]\n  FILE  .fig, .pen (Pencil), .json (Figma REST or native), .svg or .a11y; without a file the projects home screen opens
   a11y://join/LINK  open the Join session dialog with a shared link filled in
+  a11y://open       focus the running app; nothing is opened (a `#fragment`/`?query` suffix is ignored)
   --scale    with --screenshot: device pixel ratio (2 writes a PNG twice --size, rendered crisp rather than upscaled)
   --home     show the home screen (also in --screenshot mode)
   --print-library-path  print the library folder a11y uses and exit

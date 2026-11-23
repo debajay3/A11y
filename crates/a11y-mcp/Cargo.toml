@@ -10,6 +10,7 @@ server = ["dep:rmcp", "dep:tokio"]
 
 [dependencies]
 a11y-doc.workspace = true
+a11y-engine.workspace = true
 a11y-export.workspace = true
 a11y-svg.workspace = true
 a11y-library.workspace = true
