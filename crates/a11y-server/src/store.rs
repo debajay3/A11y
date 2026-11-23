@@ -15,7 +15,16 @@ use std::{
 pub fn load_document(input: &Path) -> Result<(PathBuf, Document, String), String> {
     let ext = input.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("Untitled");
-    let target = if ext == "a11y" { input.to_path_buf() } else { input.with_extension("a11y") };
+    let native = matches!(ext.as_str(), "a11y" | "desigma");
+    let current = input.with_extension("a11y");
+    let legacy = input.with_extension("desigma");
+    let target = if native {
+        input.to_path_buf()
+    } else if current.exists() || !legacy.exists() {
+        current
+    } else {
+        legacy
+    };
     if target.exists() {
         let doc = load_external(&target).map_err(|e| format!("cannot open {}: {e}", target.display()))?;
         let note = if target == input {
@@ -25,7 +34,7 @@ pub fn load_document(input: &Path) -> Result<(PathBuf, Document, String), String
         };
         return Ok((target, doc, note));
     }
-    if ext == "a11y" && !input.exists() {
+    if native && !input.exists() {
         let mut doc = Document::new(stem);
         doc.add_page("Page 1");
         return Ok((target, doc, format!("{} does not exist, starting a new document", input.display())));
@@ -120,6 +129,35 @@ mod tests {
         assert_eq!(p2, d.join("new.a11y"));
         assert!(note.contains("saved earlier"));
         let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn legacy_shared_documents_save_to_the_same_file_and_survive_restart() {
+        let d = dir("legacy-native");
+        let original = d.join("shared.desigma");
+        let mut doc = Document::new("Existing shared design");
+        doc.add_page("Page 1");
+        save_atomic(&original, doc.to_json().unwrap().as_bytes()).unwrap();
+        let (path, mut loaded, _) = load_document(&original).unwrap();
+        assert_eq!(path, original);
+        loaded.name = "Saved collaboration edit".into();
+        save_atomic(&path, loaded.to_json().unwrap().as_bytes()).unwrap();
+        assert_eq!(load_document(&original).unwrap().1.name, "Saved collaboration edit");
+        assert!(!d.join("shared.a11y").exists());
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn an_older_saved_import_remains_the_authoritative_document() {
+        let d = dir("legacy-import");
+        let mut doc = Document::new("Saved edits");
+        doc.add_page("Page 1");
+        let legacy = d.join("source.desigma");
+        save_atomic(&legacy, doc.to_json().unwrap().as_bytes()).unwrap();
+        let (path, loaded, _) = load_document(&d.join("source.json")).unwrap();
+        assert_eq!(path, legacy);
+        assert_eq!(loaded.name, "Saved edits");
+        std::fs::remove_dir_all(d).unwrap();
     }
 
     #[test]

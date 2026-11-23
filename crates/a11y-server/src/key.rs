@@ -10,7 +10,12 @@ use std::{
 /// `.<stem>.a11y-key` next to the document.
 pub fn default_key_path(doc: &Path) -> PathBuf {
     let stem = doc.file_stem().and_then(|s| s.to_str()).unwrap_or("document");
-    doc.with_file_name(format!(".{stem}.a11y-key"))
+    let legacy = doc.with_file_name(format!(".{stem}.desigma-key"));
+    if legacy.exists() {
+        legacy
+    } else {
+        doc.with_file_name(format!(".{stem}.a11y-key"))
+    }
 }
 
 /// Reads the key at `path`, or creates a new random one there. A file that exists but is not a
@@ -75,5 +80,17 @@ mod tests {
     #[test]
     fn default_path_is_hidden_next_to_the_file() {
         assert_eq!(default_key_path(Path::new("/srv/a/design.a11y")), Path::new("/srv/a/.design.a11y-key"));
+    }
+    #[test]
+    fn existing_legacy_identity_is_reused_without_creating_a_new_key() {
+        let root = std::env::temp_dir().join(format!("a11y-legacy-key-{}", a11y_library::new_id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let legacy = root.join(".design.desigma-key");
+        std::fs::write(&legacy, format!("{}\n", "12".repeat(32))).unwrap();
+        let path = default_key_path(&root.join("design.desigma"));
+        assert_eq!(path, legacy);
+        assert_eq!(load_or_create_key(&path).unwrap(), [0x12; 32]);
+        assert!(!root.join(".design.a11y-key").exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
