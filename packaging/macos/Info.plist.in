@@ -7,7 +7,7 @@
   <key>CFBundleDisplayName</key>
   <string>A11y</string>
   <key>CFBundleIdentifier</key>
-  <string>com.debajay3.a11y</string>
+  <string>local.a11y.editor</string>
   <key>CFBundleExecutable</key>
   <string>a11y</string>
   <key>CFBundleIconFile</key>
@@ -36,11 +36,17 @@
       <key>CFBundleURLSchemes</key>
       <array>
         <string>a11y</string>
+        <string>desigma</string>
       </array>
     </dict>
   </array>
   <key>CFBundleDocumentTypes</key>
   <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>Legacy design document</string>
+      <key>CFBundleTypeExtensions</key><array><string>desigma</string></array>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+    </dict>
     <dict>
       <key>CFBundleTypeName</key>
       <string>a11y document</string>

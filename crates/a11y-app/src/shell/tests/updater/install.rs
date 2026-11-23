@@ -124,7 +124,7 @@ fn a_prepared_update_offers_restart_to_update() {
     assert!(has_rect(&s, "updater-restart") && has_rect(&s, "updater-later") && has_rect(&s, "updater-page"));
     assert!(!has_rect(&s, "updater-update") && !has_rect(&s, "updater-skip") && !has_rect(&s, "updater-bar"));
     let t = texts(&s);
-    assert!(t.iter().any(|x| x == "Restart to update") && t.iter().any(|x| x == "a11y 99.0.0-alpha.1 is ready"), "{t:?}");
+    assert!(t.iter().any(|x| x == "Restart to update") && t.iter().any(|x| x == "A11y 99.0.0-alpha.1 is ready"), "{t:?}");
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&sim_dir);
 }
@@ -145,7 +145,7 @@ fn the_banner_says_when_the_update_is_ready() {
     let (mut s, sim_dir) = sim(false);
     s.shell.app.updater.install = ready(&dir);
     s.frame(vec![]);
-    assert!(texts(&s).iter().any(|x| x == "a11y 99.0.0-alpha.1 is ready to install"));
+    assert!(texts(&s).iter().any(|x| x == "A11y 99.0.0-alpha.1 is ready to install"));
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&sim_dir);
 }

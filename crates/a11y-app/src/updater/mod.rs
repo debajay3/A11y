@@ -21,6 +21,7 @@ mod assets;
 mod download;
 pub mod install;
 mod job;
+mod signature;
 pub mod ui;
 
 use crate::app::App;
@@ -340,6 +341,9 @@ pub fn preset(app: &mut App, panel: &str) {
 
 /// GitHub's release list, or `A11Y_UPDATE_URL` (an http(s) URL or a file path) for tests.
 fn fetch_listing() -> Result<Vec<u8>, String> {
+    if crate::RELEASE_BUILD {
+        return fetch(RELEASES);
+    }
     match std::env::var("A11Y_UPDATE_URL") {
         Ok(source) if !source.trim().is_empty() => fetch(source.trim()),
         _ => fetch(RELEASES),

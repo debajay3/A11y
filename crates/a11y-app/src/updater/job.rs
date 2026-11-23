@@ -34,7 +34,11 @@ fn prepare(release: &Release, target: &Target, work: &Path, cancel: &AtomicBool,
     let asset = assets::pick(&release.assets, target.kind, &release.version)?;
     let sums = assets::sums(&release.assets)?;
     // the checksum comes first: a release without one for this file is refused before 40 MB are fetched
-    let expected = assets::expected_digest(&download::to_string(&sums.url, MAX_SUMS, cancel)?, &asset.name)?;
+    let sums_text = download::to_string(&sums.url, MAX_SUMS, cancel)?;
+    let signature = release.assets.iter().find(|a| a.name == "SHA256SUMS.sig").ok_or_else(|| "this release has no signed update manifest".to_string())?;
+    let signature_text = download::to_string(&signature.url, 1024, cancel)?;
+    super::signature::verify(&sums_text, &signature_text, &release.version)?;
+    let expected = assets::expected_digest(&sums_text, &asset.name)?;
     if asset.size > MAX_DOWNLOAD {
         return Err(Fail::Failed(format!("the download is larger than the {} MB limit", MAX_DOWNLOAD >> 20)));
     }
@@ -109,14 +113,9 @@ mod tests {
     fn files(kind: Kind, data: &[u8], entry: Option<(&str, String)>) -> Vec<(String, Vec<u8>)> {
         let mut files = vec![(format!("/{}", assets::asset_name(kind, &Version::parse(V).unwrap())), data.to_vec())];
         if let Some((name, digest)) = entry {
-            files.push((
-                "/SHA256SUMS".into(),
-                format!(
-                    "{digest}  {name}
-"
-                )
-                .into_bytes(),
-            ));
+            let manifest = format!("# a11y-version={V}\n# collaboration-protocol=3\n{digest}  {name}\n");
+            files.push(("/SHA256SUMS.sig".into(), super::super::signature::test_sign(&manifest).into_bytes()));
+            files.push(("/SHA256SUMS".into(), manifest.into_bytes()));
         }
         files
     }
@@ -149,7 +148,7 @@ mod tests {
         let _guard = WORK.lock().unwrap_or_else(|e| e.into_inner());
         let setup = b"MZ installer bytes".to_vec();
         let served = files(Kind::WindowsInstaller, &setup, Some((&name_of(Kind::WindowsInstaller), hex(&setup))));
-        let release = release(&serve(served.clone(), 2), &served);
+        let release = release(&serve(served.clone(), 3), &served);
         let states = run_collect(&release, &windows_target());
         assert!(matches!(states.first(), Some(Install::Downloading { done: 0, .. })), "{states:?}");
         assert!(states.contains(&Install::Verifying) && states.contains(&Install::Preparing), "{states:?}");
@@ -163,7 +162,7 @@ mod tests {
         let _guard = WORK.lock().unwrap_or_else(|e| e.into_inner());
         let name = name_of(Kind::WindowsInstaller);
         let served = files(Kind::WindowsInstaller, b"MZ real bytes", Some((&name, hex(b"something else"))));
-        let release = release(&serve(served.clone(), 2), &served);
+        let release = release(&serve(served.clone(), 3), &served);
         let states = run_collect(&release, &windows_target());
         let Some(Install::Failed(e)) = states.last() else { panic!("{states:?}") };
         assert!(e.contains("does not match its checksum"), "{e}");
@@ -176,7 +175,7 @@ mod tests {
         let _guard = WORK.lock().unwrap_or_else(|e| e.into_inner());
         // SHA256SUMS lists another file only; the server answers one connection, so a second request would hang the test
         let served = files(Kind::MacApp, b"data", Some(("some-other-file", hex(b"x"))));
-        let release = release(&serve(served.clone(), 1), &served);
+        let release = release(&serve(served.clone(), 2), &served);
         let target = Target { kind: Kind::MacApp, exe: "/Applications/a11y.app/Contents/MacOS/a11y".into() };
         let states = run_collect(&release, &target);
         assert_eq!(states, [Install::Failed(format!("SHA256SUMS has no entry for {}", name_of(Kind::MacApp)))]);
@@ -194,7 +193,7 @@ mod tests {
     fn cancel_ends_idle() {
         let _guard = WORK.lock().unwrap_or_else(|e| e.into_inner());
         let served = files(Kind::WindowsInstaller, b"MZ", Some((&name_of(Kind::WindowsInstaller), hex(b"MZ"))));
-        let release = release(&serve(served.clone(), 1), &served);
+        let release = release(&serve(served.clone(), 2), &served);
         let cancel = AtomicBool::new(false);
         let seen = Mutex::new(Vec::new());
         run(&release, &windows_target(), &cancel, &|s| {
@@ -206,6 +205,22 @@ mod tests {
         let seen = seen.into_inner().unwrap();
         assert_eq!(seen.last(), Some(&Install::Idle), "{seen:?}");
         let _ = std::fs::remove_dir_all(install::work_dir());
+    }
+
+    #[test]
+    fn unsigned_or_tampered_release_never_downloads_the_program() {
+        let _guard = WORK.lock().unwrap_or_else(|e| e.into_inner());
+        for tamper in [false, true] {
+            let mut served = files(Kind::WindowsInstaller, b"MZ", Some((&name_of(Kind::WindowsInstaller), hex(b"MZ"))));
+            if tamper {
+                served.iter_mut().find(|(name, _)| name == "/SHA256SUMS").unwrap().1.extend_from_slice(b"tampered");
+            } else {
+                served.retain(|(name, _)| name != "/SHA256SUMS.sig");
+            }
+            let release = release(&serve(served.clone(), if tamper { 2 } else { 1 }), &served);
+            let states = run_collect(&release, &windows_target());
+            assert!(matches!(states.as_slice(), [Install::Failed(_)]), "{states:?}");
+        }
     }
 
     #[test]

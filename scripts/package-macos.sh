@@ -12,7 +12,7 @@
 #
 # The app is ad-hoc signed (`codesign --sign -`). That is not a Developer ID signature, so Gatekeeper
 # still asks the user to confirm once (Open Anyway), but Apple Silicon no longer reports the app as
-# "damaged". Bundle identifier: com.debajay3.a11y.
+# "damaged". Bundle identifier: local.a11y.editor.
 set -euo pipefail
 
 version=${1:?usage: package-macos.sh <version> [arm64-bin-dir] [x86_64-bin-dir]}
@@ -47,11 +47,9 @@ done
 
 # 2. Icon: build the .icns from the committed iconset; fall back to the committed .icns.
 iconset=$root/assets/icon/a11y.iconset
-if command -v iconutil >/dev/null 2>&1; then
-  iconutil -c icns -o "$res_dir/a11y.icns" "$iconset"
-else
+if ! iconutil -c icns -o "$res_dir/a11y.icns" "$iconset"; then
   echo "package-macos.sh: iconutil not found, using the committed assets/icon/a11y.icns" >&2
-  cp "$root/assets/icon/a11y.icns" "$res_dir/a11y.icns"
+  cp "$root/assets/a11y/A11y.icns" "$res_dir/a11y.icns"
 fi
 
 # 3. Info.plist from the template.

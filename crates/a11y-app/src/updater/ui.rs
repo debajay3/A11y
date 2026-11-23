@@ -27,7 +27,7 @@ fn banner(app: &mut App, ctx: &Context) {
         return;
     }
     let ready = matches!(app.updater.install, Install::Ready(_));
-    let text = if ready { format!("a11y {} is ready to install", release.version) } else { format!("a11y {} is available", release.version) };
+    let text = if ready { format!("A11y {} is ready to install", release.version) } else { format!("A11y {} is available", release.version) };
     let screen = ctx.content_rect();
     let below_libraries = app.home.is_none() && app.update_banner_visible();
     let measure = ctx.layer_painter(LayerId::new(Order::Tooltip, Id::new("updater-measure")));
@@ -135,7 +135,7 @@ fn dialog(app: &mut App, ctx: &Context) {
         }
         Install::Ready(_) => rows.push(plain(
             m,
-            format!("a11y {} is downloaded and checked. Restart to finish updating. If you have unsaved changes you are asked first.", release.version),
+            format!("A11y {} is downloaded and checked. Restart to finish updating. If you have unsaved changes you are asked first.", release.version),
             theme::font_body(),
             theme::TEXT_SECONDARY,
             14.0,
@@ -205,7 +205,7 @@ fn dialog(app: &mut App, ctx: &Context) {
         let x0 = rect.left() + PAD;
         let mut y = rect.top() + PAD;
         let title =
-            if matches!(install, Install::Ready(_)) { format!("a11y {} is ready", release.version) } else { format!("a11y {} is available", release.version) };
+            if matches!(install, Install::Ready(_)) { format!("A11y {} is ready", release.version) } else { format!("A11y {} is available", release.version) };
         p.text(Pos2::new(x0, y + 12.0), Align2::LEFT_CENTER, title, theme::font_large_strong(), theme::TEXT);
         y += 24.0 + 12.0;
         for (row, h) in rows.into_iter().zip(heights) {

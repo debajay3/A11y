@@ -69,7 +69,7 @@ fn the_dialog_shows_a_short_excerpt_of_the_notes() {
         })
         .collect();
     for want in [
-        "a11y 99.0.0-alpha.1 is available",
+        "A11y 99.0.0-alpha.1 is available",
         "What's changed",
         "• change 8",
         "and 2 more on the release page",

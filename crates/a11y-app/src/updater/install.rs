@@ -279,7 +279,9 @@ old="$app.old.$pid"
 rm -rf "$old"
 if mv "$app" "$old"; then
   if mv "$new" "$app"; then
-    rm -rf "$old"
+    previous="$app.previous"
+    rm -rf "$previous"
+    mv "$old" "$previous"
   else
     mv "$old" "$app"
   fi

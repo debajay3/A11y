@@ -68,7 +68,7 @@ pub const VERSION: &str = match option_env!("A11Y_VERSION") {
     None => env!("CARGO_PKG_VERSION"),
 };
 /// Only release builds carry a stamped version; builds from source never look for updates.
-pub const RELEASE_BUILD: bool = false; // A11y updates must never install upstream A11y builds.
+pub const RELEASE_BUILD: bool = option_env!("A11Y_VERSION").is_some(); // Only explicitly versioned release builds update.
 
 /// The app icon (256 px PNG embedded at build time) for the taskbar, Dock and alt-tab. Every window
 /// a11y opens (including Present and "open in new window" processes) starts through `main`, so

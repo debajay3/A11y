@@ -23,6 +23,7 @@ dependencies = [
  "base64 0.22.1",
  "cosmic-text",
  "dirs",
+ "ed25519-dalek",
  "eframe",
  "egui",
  "gif",

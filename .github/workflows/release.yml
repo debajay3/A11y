@@ -63,13 +63,18 @@ jobs:
       # On Windows, crates/a11y-app/build.rs embeds the icon and version info
       # (rc.exe ships with the runner's Windows SDK); it fails the build under CI
       # if that step breaks, so an icon-less exe is never released.
+      - name: Use static Windows runtime
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'RUSTFLAGS=-C target-feature=+crt-static' >> "$GITHUB_ENV"
+
       - name: Build a11y, a11y-diff and a11y-mcp
         run: cargo build --release --locked --target ${{ matrix.target }} -p a11y-app -p a11y-diff -p a11y-mcp
 
       - name: Check the stamped version
         if: github.ref_type == 'tag'
         shell: bash
-        run: test "$(target/${{ matrix.target }}/release/a11y --version)" = "a11y ${A11Y_VERSION}"
+        run: test "$(target/${{ matrix.target }}/release/a11y --version)" = "A11y ${A11Y_VERSION}"
 
       - name: Package
         shell: bash
@@ -137,7 +142,7 @@ jobs:
 
       - name: Check the stamped version
         if: github.ref_type == 'tag'
-        run: test "$(target/aarch64-apple-darwin/release/a11y --version)" = "a11y ${A11Y_VERSION}"
+        run: test "$(target/aarch64-apple-darwin/release/a11y --version)" = "A11y ${A11Y_VERSION}"
 
       - name: Package a11y.app (.dmg and .tar.gz)
         run: scripts/package-macos.sh "${{ steps.version.outputs.version }}"
@@ -160,6 +165,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -171,6 +180,13 @@ jobs:
           cat *.sha256 | sort -k2 > SHA256SUMS
           rm -f *.sha256
           cat SHA256SUMS
+
+      - name: Sign update manifest
+        env:
+          A11Y_UPDATE_SIGNING_KEY: ${{ secrets.A11Y_UPDATE_SIGNING_KEY }}
+        run: |
+          python -m pip install cryptography==46.0.3
+          python scripts/sign-update.py "$GITHUB_REF_NAME"
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -194,3 +210,4 @@ jobs:
             dist/*.dmg
             dist/*-setup.exe
             dist/SHA256SUMS
+            dist/SHA256SUMS.sig

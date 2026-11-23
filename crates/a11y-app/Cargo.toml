@@ -46,6 +46,7 @@ serde.workspace = true
 ureq = "2"
 semver = "1"
 sha2 = "0.11"
+ed25519-dalek = "3"
 # the portable Windows zip is unpacked in process (the same features a11y-fig uses)
 zip = { version = "9", default-features = false, features = ["deflate"] }
 url = "2"
