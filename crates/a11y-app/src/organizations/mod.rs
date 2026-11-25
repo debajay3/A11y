@@ -81,6 +81,7 @@ impl App {
         self.ai_cancel();
         self.stop_plugin();
         self.stop_bridge();
+        self.end_collab();
         self.comments.author = None;
         self.lib_file = None;
         self.desktop_tabs = Default::default();

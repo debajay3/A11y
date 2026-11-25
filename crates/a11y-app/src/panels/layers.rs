@@ -41,6 +41,7 @@ pub struct LayersState {
     pub drop: Option<Drop>,
     pub last_sel: Vec<NodeId>,
     pub anchor: Option<NodeId>,
+    last_clicked_row: Option<NodeId>,
     /// Name filter (the header's search icon): shown, its text, and a focus request.
     pub filter_open: bool,
     pub filter: String,
@@ -164,6 +165,26 @@ pub(crate) fn kind_icon(k: &NodeKind) -> Icon {
     }
 }
 
+fn paint_layer_icon(p: &egui::Painter, icon: Icon, center: Pos2, color: egui::Color32) {
+    let glyph = icons::glyph_rect(center, theme::LAYER_ICON_SIZE, p.ctx().pixels_per_point());
+    let point = |x: f32, y: f32| glyph.min + Vec2::new(x, y) * (glyph.width() / 16.0);
+    let stroke = Stroke::new(1.25, color);
+    match icon {
+        Icon::Frame => {
+            for n in [5.5, 10.5] {
+                p.line_segment([point(n, 2.5), point(n, 13.5)], stroke);
+                p.line_segment([point(2.5, n), point(13.5, n)], stroke);
+            }
+        }
+        Icon::Text => {
+            p.line_segment([point(3.0, 3.0), point(13.0, 3.0)], stroke);
+            p.line_segment([point(8.0, 3.0), point(8.0, 13.0)], stroke);
+            p.line_segment([point(6.0, 13.0), point(10.0, 13.0)], stroke);
+        }
+        _ => icons::paint(p, icon, center, theme::LAYER_ICON_SIZE, color),
+    }
+}
+
 fn is_component_like(n: &a11y_doc::Node) -> bool {
     // Components, instances and every layer inside an instance read as purple.
     matches!(n.kind, NodeKind::Component(_) | NodeKind::ComponentSet(_) | NodeKind::Instance { .. }) || n.component.source.is_some()
@@ -239,16 +260,19 @@ pub fn show(app: &mut App, ui: &mut Ui, region: Rect) {
                 f
             };
             let resp = ui.interact(rr, ui.id().with(("layer", row.id.0)), Sense::click_and_drag());
+            #[cfg(test)]
+            widgets::record(ui, &format!("layer-row-{}", row.id.0), rr);
             let row_hot = ui.rect_contains_pointer(rr);
             if resp.hovered() {
                 app.hover_layer = Some(row.id);
             }
+            let row_fill = rr.shrink2(Vec2::new(6.0, 0.0));
             if is_sel {
-                p.rect_filled(rr, 0.0, if resp.hovered() { theme::BG_SELECTED_HOVER } else { theme::BG_SELECTED });
+                p.rect_filled(row_fill, 0.0, theme::BG_SELECTED);
             } else if under_sel {
-                p.rect_filled(rr, 0.0, theme::BG_SELECTED_SECONDARY);
+                p.rect_filled(row_fill, 0.0, theme::BG_SELECTED_SECONDARY);
             } else if resp.hovered() && app.layers.drag.is_none() {
-                p.rect_stroke(rr.shrink2(Vec2::new(8.0, 0.0)), theme::cr(theme::RADIUS_MEDIUM), Stroke::new(1.0, theme::BORDER), StrokeKind::Inside);
+                p.rect_filled(row_fill, 0.0, theme::BG_HOVER);
             }
 
             let indent = row.depth as f32 * theme::LAYER_INDENT;
@@ -256,9 +280,7 @@ pub fn show(app: &mut App, ui: &mut Ui, region: Rect) {
             if row.has_children {
                 let open = app.layers.expanded.contains(&row.id);
                 let cr = ui.interact(chev, ui.id().with(("chev", row.id.0)), Sense::click());
-                let col = if is_sel {
-                    theme::ICON_SELECTED
-                } else if cr.hovered() {
+                let col = if is_sel || cr.hovered() {
                     theme::ICON
                 } else {
                     theme::ICON_TERTIARY
@@ -277,11 +299,15 @@ pub fn show(app: &mut App, ui: &mut Ui, region: Rect) {
             let icon_col = if comp {
                 theme::TEXT_COMPONENT
             } else if is_sel {
-                theme::ICON_SELECTED
+                theme::ICON
             } else {
                 theme::ICON_TERTIARY
             };
-            icons::paint(&p, kind_icon(&node.kind), icon_c, theme::LAYER_ICON_SIZE, icon_col);
+            let icon = match &node.kind {
+                NodeKind::Rectangle if node.fills.iter().any(|paint| matches!(paint.kind, a11y_doc::PaintKind::Image { .. })) => Icon::Image,
+                kind => kind_icon(kind),
+            };
+            paint_layer_icon(&p, icon, icon_c, icon_col);
 
             let text_left = icon_c.x + theme::LAYER_ICON_SIZE / 2.0 + 6.0;
             let toggles_w = theme::LAYER_TOGGLE_SIZE * 2.0 + 8.0;
@@ -362,13 +388,19 @@ pub fn show(app: &mut App, ui: &mut Ui, region: Rect) {
                 app.ui.ctx_menu = ui.input(|i| i.pointer.interact_pos());
             }
 
-            // Selection clicks.
+            // Selection clicks. egui can count a double-click as a triple-click
+            // when the user moves quickly from another layer row.
             let mods = ui.input(|i| i.modifiers);
-            if resp.double_clicked() {
-                app.layers.renaming = Some(row.id);
-                app.layers.rename_started = false;
-            } else if resp.clicked() && app.layers.renaming != Some(row.id) {
-                if mods.shift {
+            if resp.clicked() && app.layers.renaming != Some(row.id) {
+                resp.surrender_focus();
+                let same_row = app.layers.last_clicked_row == Some(row.id);
+                let focus = same_row && (resp.double_clicked() || resp.triple_clicked());
+                app.layers.last_clicked_row = Some(row.id);
+                if focus {
+                    app.select_only(row.id);
+                    app.layers.anchor = Some(row.id);
+                    app.fit_selection();
+                } else if mods.shift {
                     let anchor = app.layers.anchor.and_then(|a| rows.iter().position(|r| r.id == a)).unwrap_or(i);
                     let (a, b) = (anchor.min(i), anchor.max(i));
                     app.selection = rows[a..=b].iter().map(|r| r.id).collect();

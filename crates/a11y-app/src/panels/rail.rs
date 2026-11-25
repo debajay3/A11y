@@ -9,9 +9,9 @@ use egui::{Align2, Pos2, Rect, Sense, Ui, Vec2};
 /// Rail entries in order; the flag marks the item that starts a new group (separator above it).
 pub const ITEMS: [(RailItem, Icon, &str, bool); 4] = [
     (RailItem::File, Icon::File, "File", false),
-    (RailItem::Assets, Icon::Assets, "Assets", false),
+    (RailItem::Assets, Icon::Shapes, "Assets", false),
     (RailItem::Variables, Icon::Variables, "Variables", true),
-    (RailItem::Plugins, Icon::Component, "Plugins", false),
+    (RailItem::Plugins, Icon::Tools, "Plugins", false),
 ];
 
 /// Top y (relative to the rail top) of each item's 56px cell.
@@ -43,8 +43,9 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
     );
     let r = ui.interact(mb, ui.id().with("rail-menu"), Sense::click());
     widgets::button_bg(&p, mb, &r, app.ui.menu == Some(MenuKind::Main), theme::cr(theme::RADIUS_MEDIUM));
-    icons::paint(&p, Icon::Logo, mb.center(), 20.0, theme::ICON);
-    if r.clicked() {
+    let mark_color = if app.ui.menu == Some(MenuKind::Main) { theme::ICON_SELECTED } else { theme::ICON };
+    icons::paint_brand_mark(&p, mb.center(), 24.0, mark_color);
+    if r.on_hover_text(crate::i18n::tr("Main menu")).clicked() {
         toggle(app, MenuKind::Main, mb);
     }
     separator(&p, rect, rect.top() + theme::RAIL_SEPARATOR_Y, inner_w);
@@ -71,7 +72,14 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
         } else if resp.hovered() {
             p.rect_filled(Rect::from_center_size(ic, Vec2::splat(theme::RAIL_TILE)), theme::cr(theme::RADIUS_MEDIUM), theme::BG_HOVER);
         }
-        icons::paint(&p, *icon, ic, theme::RAIL_ICON_SIZE, theme::ICON);
+        let icon_color = if selected {
+            theme::ICON_SELECTED
+        } else if resp.hovered() {
+            theme::ICON
+        } else {
+            theme::ICON_SECONDARY
+        };
+        icons::paint(&p, *icon, ic, theme::RAIL_ICON_SIZE, icon_color);
         let font = if selected { theme::font_small_strong() } else { theme::font_small() };
         p.text(Pos2::new(ir.center().x, ir.top() + theme::RAIL_LABEL_CENTER_Y), Align2::CENTER_CENTER, crate::i18n::tr(label), font, theme::TEXT);
         if resp.clicked() {

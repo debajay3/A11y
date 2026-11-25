@@ -1,11 +1,13 @@
 //! Left sidebar of the home screen: search, Recents / Starred, the project
-//! tree with its folders, and the Trash.
+//! tree with its folders and files, and the Trash.
 
 use super::{Act, DropTo, Home, Section, Target};
 use crate::icons::{self, Icon};
 use crate::theme;
 use crate::widgets;
+use a11y_library::{FileEntry, Project};
 use egui::{Align2, Id, Pos2, Rect, Response, Sense, Ui, Vec2};
+use std::collections::HashMap;
 
 const ROW_H: f32 = 30.0;
 const INDENT: f32 = 16.0;
@@ -98,8 +100,8 @@ pub fn show(
     y += 28.0;
 
     // ---- project tree (scrolls)
-    let trash_h = 88.0;
-    let list = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x0 + w, rect.bottom() - trash_h));
+    let trash_h = ROW_H + 16.0;
+    let list = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x0 + w, (rect.bottom() - trash_h).max(y)));
     let rows = tree_rows(h);
     let content_h = rows.len() as f32 * ROW_H + 8.0;
     crate::panels::wheel_scroll(ui, list, &mut h.side_scroll, content_h);
@@ -124,12 +126,30 @@ pub fn show(
             if r.bottom() < list.top() || r.top() > list.bottom() {
                 continue;
             }
-            let selected = !h.searching() && h.section == tr.section;
-            let drop_hover = dragging && ptr.is_some_and(|p| r.contains(p) && list.contains(p));
-            let icon = if tr.folder { Icon::Folder } else { Icon::Project };
-            let resp =
-                row(ui, r, Id::new(("home-tree", &tr.key)), icon, &tr.label, tr.depth as f32 * INDENT, selected, drop_hover, &format!("project-{}", tr.label));
-            // chevron for projects with folders
+            let (icon, selected, drop_to) = match &tr.target {
+                Target::Project(project) => {
+                    (Icon::Project, h.section == Section::Project(project.clone(), None), Some(DropTo::Project(project.clone())))
+                }
+                Target::Folder(project, folder) => (
+                    Icon::Folder,
+                    h.section == Section::Project(project.clone(), Some(folder.clone())),
+                    Some(DropTo::Folder(project.clone(), folder.clone())),
+                ),
+                Target::File(id) => (Icon::File, h.selected.as_ref() == Some(id), None),
+            };
+            let drop_hover = drop_to.is_some() && dragging && ptr.is_some_and(|p| r.contains(p) && list.contains(p));
+            let record = if matches!(tr.target, Target::File(_)) { "tree-file" } else { "project" };
+            let resp = row(
+                ui,
+                r,
+                Id::new(("home-tree", &tr.key)),
+                icon,
+                &tr.label,
+                tr.depth as f32 * INDENT,
+                selected && !h.searching(),
+                drop_hover,
+                &format!("{record}-{}", tr.label),
+            );
             if let Some(open) = tr.expanded {
                 let c = Pos2::new(r.left() + 10.0 + tr.depth as f32 * INDENT, r.center().y);
                 icons::paint(ui.painter(), if open { Icon::ChevronDown } else { Icon::ChevronRight }, c, 12.0, theme::ICON_TERTIARY);
@@ -137,44 +157,38 @@ pub fn show(
             let on_chevron = tr.expanded.is_some() && ptr.is_some_and(|p| p.x < r.left() + 22.0 + tr.depth as f32 * INDENT);
             if resp.clicked() {
                 if on_chevron {
-                    to_toggle = Some(tr.project.clone());
+                    to_toggle = Some(tr.key.clone());
                 } else {
-                    acts.push(Act::Go(tr.section.clone()));
+                    acts.push(match &tr.target {
+                        Target::Project(project) => Act::Go(Section::Project(project.clone(), None)),
+                        Target::Folder(project, folder) => Act::Go(Section::Project(project.clone(), Some(folder.clone()))),
+                        Target::File(id) => Act::Open(id.clone()),
+                    });
                 }
             }
             if resp.secondary_clicked() {
                 let at = ui.input(|i| i.pointer.interact_pos()).unwrap_or(r.left_bottom());
-                let target = match &tr.section {
-                    Section::Project(p, Some(f)) => Target::Folder(p.clone(), f.clone()),
-                    _ => Target::Project(tr.project.clone()),
-                };
-                secondary = Some((target, at));
+                secondary = Some((tr.target.clone(), at));
             }
-            let to = match &tr.section {
-                Section::Project(p, Some(f)) => DropTo::Folder(p.clone(), f.clone()),
-                _ => DropTo::Project(tr.project.clone()),
-            };
-            dropzones.push((r.intersect(list), to));
+            if let Some(to) = drop_to {
+                dropzones.push((r.intersect(list), to));
+            }
         }
     });
     h.drop_rects.extend(dropzones);
     crate::panels::scrollbar(ui, list, scroll, content_h);
-    if let Some(p) = to_toggle {
-        if !h.collapsed.remove(&p) {
-            h.collapsed.insert(p);
+    if let Some(key) = to_toggle {
+        if !h.collapsed.remove(&key) {
+            h.collapsed.insert(key);
         }
     }
     if secondary.is_some() {
         h.menu = secondary;
     }
 
-    let cr = Rect::from_min_size(Pos2::new(x0 + 8.0, rect.bottom() - trash_h + 6.0), Vec2::new(w - 16.0, ROW_H));
-    if row(ui, cr, Id::new("home-claude"), Icon::Link, "Claude", 0.0, false, false, "home-claude").clicked() {
-        acts.push(Act::Mcp);
-    }
     // ---- Trash
     widgets::hline(&p, x0, x0 + w, rect.bottom() - trash_h, theme::BORDER);
-    let tr = Rect::from_min_size(Pos2::new(x0 + 8.0, rect.bottom() - trash_h + 42.0), Vec2::new(w - 16.0, ROW_H));
+    let tr = Rect::from_min_size(Pos2::new(x0 + 8.0, rect.bottom() - trash_h + 8.0), Vec2::new(w - 16.0, ROW_H));
     let n = h.snap.trash.len();
     let label = if n > 0 { format!("Trash ({n})") } else { "Trash".to_string() };
     if row(ui, tr, Id::new("home-trash"), Icon::Trash, &crate::i18n::tr_text(&label), 0.0, h.section == Section::Trash && !h.searching(), false, "trash")
@@ -186,47 +200,69 @@ pub fn show(
 
 struct TreeRow {
     key: String,
-    project: String,
     label: String,
     depth: usize,
-    folder: bool,
     /// `Some(open)` when the row can be expanded.
     expanded: Option<bool>,
-    section: Section,
+    target: Target,
 }
 
-/// Projects and (unless collapsed) their folder trees, flattened.
+type FolderFiles<'a> = HashMap<(&'a str, &'a str), Vec<&'a FileEntry>>;
+
+/// Projects, folders and files within folders, flattened for rendering.
 fn tree_rows(h: &Home) -> Vec<TreeRow> {
-    fn walk(out: &mut Vec<TreeRow>, p: &a11y_library::Project, parent: Option<&str>, depth: usize) {
-        let mut kids: Vec<_> = p.folders.iter().filter(|f| f.parent.as_deref() == parent).collect();
-        kids.sort_by_key(|f| f.name.to_lowercase());
-        for f in kids {
+    fn walk(out: &mut Vec<TreeRow>, h: &Home, files: &FolderFiles<'_>, project: &Project, parent: Option<&str>, depth: usize) {
+        let mut folders: Vec<_> = project.folders.iter().filter(|folder| folder.parent.as_deref() == parent).collect();
+        folders.sort_by_key(|folder| folder.name.to_lowercase());
+        for folder in folders {
+            let key = format!("{}/{}", project.id, folder.id);
+            let open = !h.collapsed.contains(&key);
+            let children = files.get(&(project.id.as_str(), folder.id.as_str()));
+            let has_subfolders = project.folders.iter().any(|child| child.parent.as_deref() == Some(folder.id.as_str()));
             out.push(TreeRow {
-                key: format!("{}/{}", p.id, f.id),
-                project: p.id.clone(),
-                label: f.name.clone(),
+                key,
+                label: folder.name.clone(),
                 depth,
-                folder: true,
-                expanded: None,
-                section: Section::Project(p.id.clone(), Some(f.id.clone())),
+                expanded: (children.is_some() || has_subfolders).then_some(open),
+                target: Target::Folder(project.id.clone(), folder.id.clone()),
             });
-            walk(out, p, Some(&f.id), depth + 1);
+            if open {
+                walk(out, h, files, project, Some(&folder.id), depth + 1);
+                if let Some(children) = children {
+                    out.extend(children.iter().map(|file| TreeRow {
+                        key: format!("file/{}", file.id),
+                        label: file.name.clone(),
+                        depth: depth + 1,
+                        expanded: None,
+                        target: Target::File(file.id.clone()),
+                    }));
+                }
+            }
         }
     }
+
+    let mut files = FolderFiles::new();
+    for file in &h.snap.files {
+        if let Some(folder) = file.folder.as_deref() {
+            files.entry((file.project.as_str(), folder)).or_default().push(file);
+        }
+    }
+    for children in files.values_mut() {
+        children.sort_by_cached_key(|file| file.name.to_lowercase());
+    }
+
     let mut out = vec![];
-    for p in &h.snap.projects {
-        let open = !h.collapsed.contains(&p.id);
+    for project in &h.snap.projects {
+        let open = !h.collapsed.contains(&project.id);
         out.push(TreeRow {
-            key: p.id.clone(),
-            project: p.id.clone(),
-            label: p.name.clone(),
+            key: project.id.clone(),
+            label: project.name.clone(),
             depth: 0,
-            folder: false,
-            expanded: (!p.folders.is_empty()).then_some(open),
-            section: Section::Project(p.id.clone(), None),
+            expanded: (!project.folders.is_empty()).then_some(open),
+            target: Target::Project(project.id.clone()),
         });
         if open {
-            walk(&mut out, p, None, 1);
+            walk(&mut out, h, &files, project, None, 1);
         }
     }
     out

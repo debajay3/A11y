@@ -99,7 +99,7 @@ pub struct Home {
     pub snap: Snapshot,
     /// The snapshot is stale; reload it before drawing.
     pub dirty: bool,
-    /// Projects whose folders are collapsed in the sidebar.
+    /// Project and folder rows whose children are collapsed in the sidebar.
     pub collapsed: HashSet<String>,
     pub selected: Option<String>,
     pub menu: Option<(Target, Pos2)>,
@@ -244,8 +244,6 @@ pub enum Act {
     /// Opens the Join session dialog.
     JoinSession,
     PublishShared(String),
-    /// Opens the Claude connection dialog.
-    Mcp,
     EditProfile,
     SignOut,
     Admin,
@@ -464,11 +462,6 @@ pub fn apply(app: &mut App, act: Act) {
             Ok(text) => app.publish_to_workspace(text),
             Err(e) => app.show_toast(e.to_string(), true),
         },
-        Act::Mcp => {
-            app.mcp_error = None;
-            app.mcp_dialog = true;
-            changed = false;
-        }
         Act::Import => {
             let paths = rfd::FileDialog::new()
                 .add_filter("Design files", &["fig", "pen", "json", "svg", "a11y"])

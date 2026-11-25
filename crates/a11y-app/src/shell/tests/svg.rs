@@ -156,6 +156,38 @@ fn dropping_svg_bytes_without_a_path_works_too() {
 }
 
 #[test]
+fn dropping_a_screenshot_inserts_it_into_the_current_document() {
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(80, 40, image::Rgba([64, 128, 255, 255])))
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+    let bytes = png.into_inner();
+    let path = tmp("screenshot.PNG");
+    std::fs::write(&path, &bytes).unwrap();
+    let files = [
+        egui::DroppedFile { path: Some(path.clone()), ..Default::default() },
+        egui::DroppedFile { name: "screenshot.png".into(), bytes: Some(bytes.into()), ..Default::default() },
+    ];
+    let mut s = Sim::new();
+    let before = s.ids();
+    let page = s.app().page;
+    s.mv(s.screen(60.0, 900.0));
+    for file in files {
+        s.drop_files(vec![file]);
+        assert_eq!(s.app().page, page);
+        assert_eq!(s.new_ids(&before).len(), 1);
+        let layer = s.app().doc.get(s.app().selection[0]).unwrap();
+        assert!(layer.name.ends_with("screenshot"));
+        assert_eq!(layer.size, DV::new(80.0, 40.0));
+        let a11y_doc::PaintKind::Image { image_ref, .. } = &layer.fills[0].kind else { panic!("expected an image fill") };
+        assert!(s.app().doc.images.contains_key(image_ref));
+        s.cmd_key(Key::Z);
+        assert_eq!(s.ids(), before);
+    }
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn opening_an_svg_creates_a_new_document_with_the_svg_on_page_1() {
     let path = tmp("opened.svg");
     std::fs::write(&path, ICON).unwrap();

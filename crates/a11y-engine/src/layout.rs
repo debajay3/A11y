@@ -203,11 +203,18 @@ fn child_in(doc: &Document, id: NodeId, horiz: bool) -> ChildIn {
 /// Lays out `id` and every container below it (children first so hugging
 /// sizes bubble up), writing through `ed`.
 pub fn layout_node(doc: &mut Document, ed: &mut Edit, id: NodeId) {
+    layout_node_except(doc, ed, id, &[]);
+}
+
+fn layout_node_except(doc: &mut Document, ed: &mut Edit, id: NodeId, preserved: &[NodeId]) {
+    if preserved.contains(&id) {
+        return;
+    }
     let Some(n) = doc.get(id) else { return };
     let children = n.children.clone();
     for c in &children {
         if doc.get(*c).map(|k| k.kind.is_container()).unwrap_or(false) {
-            layout_node(doc, ed, *c);
+            layout_node_except(doc, ed, *c, preserved);
         }
     }
     if matches!(doc.get(id).map(|n| &n.kind), Some(NodeKind::Group)) {
@@ -244,7 +251,7 @@ pub fn layout_node(doc: &mut Document, ed: &mut Edit, id: NodeId) {
             }
         }
         if size_changed && doc.get(*cid).map(|n| n.kind.is_container()).unwrap_or(false) {
-            layout_node(doc, ed, *cid);
+            layout_node_except(doc, ed, *cid, preserved);
         }
     }
 }
@@ -283,6 +290,10 @@ pub fn fit_group(doc: &mut Document, ed: &mut Edit, id: NodeId) {
 
 /// After any edit on `start`, re-run layout/fit on its ancestors.
 pub fn relayout_up(doc: &mut Document, ed: &mut Edit, start: NodeId) {
+    relayout_up_except(doc, ed, start, &[]);
+}
+
+fn relayout_up_except(doc: &mut Document, ed: &mut Edit, start: NodeId, preserved: &[NodeId]) {
     // on a board, connectors follow the moved node live (every move, resize and rotate comes through here)
     crate::connect::reroute_touched(doc, ed);
     let mut cur = doc.get(start).and_then(|n| n.parent);
@@ -295,7 +306,7 @@ pub fn relayout_up(doc: &mut Document, ed: &mut Edit, start: NodeId) {
         if is_group {
             fit_group(doc, ed, p);
         } else if is_al {
-            layout_node(doc, ed, p);
+            layout_node_except(doc, ed, p, preserved);
         }
         cur = doc.get(p).and_then(|n| n.parent);
     }
@@ -305,6 +316,12 @@ pub fn relayout_up(doc: &mut Document, ed: &mut Edit, start: NodeId) {
 pub fn relayout_around(doc: &mut Document, ed: &mut Edit, id: NodeId) {
     layout_node(doc, ed, id);
     relayout_up(doc, ed, id);
+}
+
+/// Lays out the destination while retaining the existing layout inside the given roots.
+pub fn relayout_around_preserving(doc: &mut Document, ed: &mut Edit, id: NodeId, preserved: &[NodeId]) {
+    layout_node_except(doc, ed, id, preserved);
+    relayout_up_except(doc, ed, id, preserved);
 }
 
 /// Applies children constraints when a (non auto-layout) frame is resized.

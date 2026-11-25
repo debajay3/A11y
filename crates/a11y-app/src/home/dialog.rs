@@ -32,6 +32,7 @@ pub enum Intent {
     About,
     /// Leaving the open file while sharing it or joined to it.
     LeaveSession,
+    CloseParkedSharedTab,
 }
 
 /// One row of the project picker: a project or one of its folders.
@@ -447,6 +448,10 @@ pub fn finish(app: &mut App, d: Dialog) {
                 app.save_to_library_as(&c.project, c.folder.as_deref(), &text);
             }
             Ok(())
+        }
+        Intent::CloseParkedSharedTab => {
+            app.desktop_tabs.shared = None;
+            return;
         }
         Intent::EmptyTrash => lib.empty_trash().inspect(|_| app.show_toast("Trash emptied", false)),
         Intent::OpenGithub => {

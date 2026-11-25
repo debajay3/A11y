@@ -78,7 +78,7 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
         Pos2::new(lt.right() - theme::PANEL_ACTION_RIGHT_PAD - theme::PANEL_ACTION_BUTTON, lt.top() + 8.0),
         Vec2::splat(theme::PANEL_ACTION_BUTTON),
     );
-    if widgets::icon_button(ui, fb, "layers-search", Icon::Search, app.layers.filter_open, "Filter layers by name").clicked() {
+    if widgets::icon_button(ui, fb, "layers-search", Icon::StrokeSettings, app.layers.filter_open, "Filter layers by name").clicked() {
         if app.layers.filter_open {
             app.close_layer_filter();
         } else {

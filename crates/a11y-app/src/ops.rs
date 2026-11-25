@@ -365,7 +365,12 @@ impl App {
             return;
         }
         let clip = system_text.and_then(clipboard::from_json).or_else(|| self.clip.clone());
-        let Some(clip) = clip else { return };
+        if let Some(clip) = clip {
+            self.paste_clip(&clip, at);
+        }
+    }
+
+    fn paste_clip(&mut self, clip: &clipboard::Clip, at: Option<Vec2>) {
         let mut parent = self.container_for_insert();
         let same_document = clip.source_document.as_deref() == Some(self.clipboard_document().as_str());
         if same_document
@@ -377,7 +382,7 @@ impl App {
         {
             parent = self.page;
         }
-        let mut lists = clipboard::instantiate(&mut self.doc, &clip);
+        let mut lists = clipboard::instantiate(&mut self.doc, clip);
         let mut tx = Tx::new();
         for (source, nodes) in clip.roots.iter().zip(&mut lists) {
             let Some(root) = nodes.first() else { continue };

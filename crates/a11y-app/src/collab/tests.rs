@@ -196,6 +196,80 @@ fn the_shared_file_opens_on_the_guest() {
     assert_eq!(r.host.doc.id_peer(), Some(0));
 }
 
+#[cfg(feature = "enhanced-desktop")]
+#[test]
+fn desktop_home_keeps_shared_tab_connected_until_closed() {
+    let root = std::env::temp_dir().join(format!("a11y-shared-home-{}", uuid::Uuid::new_v4()));
+    let mut r = Rig::new(Role::Editor);
+    r.guest.lib = Some(a11y_library::Library::open(&root).unwrap());
+    let session = r.guest.document_session.clone();
+
+    r.guest.open_desktop_home();
+    assert!(r.guest.home.is_some() && r.guest.dialog.is_none());
+    assert!(r.guest.collab.connected());
+    r.host.edit_nodes(&[r.a], |node| node.name = "Edited while away".into());
+    r.settle();
+
+    r.guest.resume_shared_tab();
+    assert!(r.guest.home.is_none() && r.guest.collab.connected());
+    assert_eq!(r.guest.document_session, session);
+    assert_eq!(Rig::name(&r.guest, r.a), "Edited while away");
+
+    r.guest.open_desktop_home();
+    r.guest.close_shared_tab();
+    assert!(r.guest.collab.connected(), "waiting for confirmation");
+    let dialog = r.guest.dialog.take().expect("a leave question");
+    crate::home::dialog::finish(&mut r.guest, dialog);
+    assert!(!r.guest.collab.active() && r.guest.home.is_some());
+    drop(r);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(feature = "enhanced-desktop")]
+#[test]
+fn shared_session_survives_switching_to_a_project_tab() {
+    let root = std::env::temp_dir().join(format!("a11y-shared-project-{}", uuid::Uuid::new_v4()));
+    let mut r = Rig::new(Role::Editor);
+    let library = a11y_library::Library::open(&root).unwrap();
+    let project = library.create_project("Local project").unwrap();
+    let mut local = Document::new("Local");
+    let page = local.add_page("Page 1");
+    let shape = local.alloc_id();
+    local.insert(page, Node::rectangle(shape, Rect::new(0.0, 0.0, 40.0, 40.0))).unwrap();
+    let file = library.create_file(&project.id, None, "Local", &local).unwrap();
+    r.guest.lib = Some(library.clone());
+    let session = r.guest.document_session.clone();
+
+    r.guest.select_only(r.a);
+    r.guest.edit_nodes(&[r.b], |node| node.name = "Sent on switch".into());
+    r.guest.open_library_file(&file.id);
+    assert!(r.guest.dialog.is_none());
+    assert_eq!(r.guest.lib_file.as_ref().unwrap().id, file.id);
+    r.guest.edit_nodes(&[shape], |node| node.name = "Local edit".into());
+    r.host.edit_nodes(&[r.a], |node| node.name = "Changed in background".into());
+    r.settle();
+    assert_eq!(Rig::name(&r.host, r.b), "Sent on switch");
+    assert_eq!(Rig::name(&r.guest, shape), "Local edit");
+
+    r.guest.resume_shared_tab();
+    assert!(r.guest.collab.connected() && r.guest.home.is_none() && r.guest.lib_file.is_none());
+    assert_eq!(r.guest.document_session, session);
+    assert_eq!(r.guest.selection, [r.a]);
+    assert_eq!(Rig::name(&r.guest, r.a), "Changed in background");
+    assert_eq!(library.load_file(&file.id).unwrap().get(shape).unwrap().name, "Local edit");
+
+    r.guest.open_library_file(&file.id);
+    r.guest.close_shared_tab();
+    let dialog = r.guest.dialog.take().expect("a leave question");
+    crate::home::dialog::finish(&mut r.guest, dialog);
+    assert!(r.guest.desktop_tabs.shared.is_none() && r.guest.home.is_none());
+    assert_eq!(r.guest.lib_file.as_ref().unwrap().id, file.id);
+    r.settle();
+    assert!(r.host.collab.host.as_ref().unwrap().peers.is_empty());
+    drop(r);
+    let _ = std::fs::remove_dir_all(root);
+}
+
 #[test]
 fn edits_travel_both_ways() {
     let mut r = Rig::new(Role::Editor);

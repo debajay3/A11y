@@ -99,6 +99,53 @@ impl App {
         self.stop_plugin();
         self.flush_autosave();
         self.end_collab();
+        self.show_library_home(&lib);
+    }
+
+    /// The desktop Home tab can cover a joined document while its session stays live.
+    pub(crate) fn open_desktop_home(&mut self) {
+        if !self.collab.is_guest() {
+            self.go_home();
+            return;
+        }
+        let Some(lib) = self.lib.clone() else {
+            self.show_toast("The projects library is unavailable", true);
+            return;
+        };
+        self.show_library_home(&lib);
+    }
+
+    pub(crate) fn resume_shared_tab(&mut self) {
+        if self.desktop_tabs.shared.is_some() {
+            if !self.leave_ok(Self::resume_shared_tab) || !self.save_before_tab_change() {
+                return;
+            }
+            self.capture_tab_view();
+            if let Some(tab) = self.desktop_tabs.shared.take() {
+                self.restore_shared_editor(tab);
+            }
+        }
+        if let Some(home) = self.home.take() {
+            self.parked_home = Some(home);
+        }
+    }
+
+    pub(crate) fn close_shared_tab(&mut self) {
+        if let Some(tab) = &self.desktop_tabs.shared {
+            if let Some(mut dialog) = tab.editor.collab.leave_dialog() {
+                dialog.intent = super::Intent::CloseParkedSharedTab;
+                self.dialog = Some(dialog);
+            } else {
+                self.desktop_tabs.shared = None;
+            }
+        } else if self.home.is_none() {
+            self.go_home();
+        } else if self.leave_ok(Self::end_collab) {
+            self.end_collab();
+        }
+    }
+
+    fn show_library_home(&mut self, lib: &Library) {
         self.canvas.reset_interaction();
         let previous = if cfg!(feature = "enhanced-desktop") { self.home.take().or_else(|| self.parked_home.take()) } else { None };
         let has_previous = previous.is_some();
@@ -113,7 +160,7 @@ impl App {
         if self.workspace.configured() && !has_previous {
             home.section = super::Section::Shared;
         }
-        home.refresh(&lib);
+        home.refresh(lib);
         self.home = Some(home);
         self.ui.menu = None;
         self.ui.ctx_menu = None;
@@ -122,7 +169,7 @@ impl App {
     /// Opens a library file in the editor.
     pub fn open_library_file(&mut self, id: &str) {
         let again = id.to_string();
-        if !self.leave_ok(move |app| app.open_library_file(&again)) {
+        if !self.can_park_shared_tab() && !self.leave_ok(move |app| app.open_library_file(&again)) {
             return;
         }
         let Some(lib) = self.lib.clone() else { return };
@@ -141,6 +188,9 @@ impl App {
         let project = lib.project(&entry.project).map(|p| p.name).unwrap_or_default();
         doc.name = entry.name.clone();
         let needs_thumb = lib.thumbnail_path(&entry).is_none();
+        if self.can_park_shared_tab() {
+            self.park_shared_tab();
+        }
         self.replace_document(doc, None);
         self.lib_file = Some(LibFile { id: entry.id.clone(), project_id: entry.project.clone(), project, name: entry.name.clone() });
         self.autosave = Autosave { seen_rev: self.canvas.tiles.rev(), saved_hash: doc_hash(&self.doc), ..Default::default() };
@@ -182,7 +232,7 @@ impl App {
 
     fn new_library_file_of(&mut self, target: Option<(String, Option<String>)>, kind: DocumentKind) {
         let again = (target.clone(), kind);
-        if !self.leave_ok(move |app| app.new_library_file_of(again.0, again.1)) {
+        if !self.can_park_shared_tab() && !self.leave_ok(move |app| app.new_library_file_of(again.0, again.1)) {
             return;
         }
         let Some(lib) = self.lib.clone() else {

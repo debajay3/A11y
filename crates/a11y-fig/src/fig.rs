@@ -10,7 +10,7 @@ use crate::kiwi::{self, KiwiValue, Schema};
 use crate::rest_import::{self, fnum, fstr};
 use crate::svgpath::write_path;
 use crate::FigError;
-use a11y_doc::{Affine, Document, FillRule, Path, PathCmd, Vec2};
+use a11y_doc::{Affine, Document, FillRule, NodeId, Path, PathCmd, Vec2};
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
 
@@ -48,6 +48,57 @@ pub fn import_fig(bytes: &[u8]) -> Result<Document, FigError> {
     let mut doc = rest_import::import_rest_value(&rest, true)?;
     doc.images = d.archive.images;
     Ok(doc)
+}
+
+/// Imports a Figma clipboard scene and returns its selected layers in stacking order.
+pub fn import_fig_selection(bytes: &[u8]) -> Result<(Document, Vec<NodeId>), FigError> {
+    if !bytes.starts_with(container::MAGIC_KIWI) {
+        return Err(FigError::Format("clipboard data has no fig-kiwi header".into()));
+    }
+    let decoded = decode(bytes)?;
+    let selected: HashSet<String> = decoded
+        .message
+        .get("clipboardSelectionRegions")
+        .and_then(KiwiValue::as_array)
+        .unwrap_or(&[])
+        .iter()
+        .flat_map(|region| region.get("nodes").and_then(KiwiValue::as_array).unwrap_or(&[]))
+        .filter_map(|node| guid_str(&kiwi::to_json(node)))
+        .collect();
+    let source_page = decoded.message.get("pastePageId").and_then(|page| guid_str(&kiwi::to_json(page)));
+    let rest = decoded_to_rest(&decoded.message, "Figma clipboard", true);
+    let doc = rest_import::import_rest_value(&rest, true)?;
+    let mut roots = Vec::new();
+    for &page in &doc.pages {
+        let Some(node) = doc.get(page) else { continue };
+        if selected.is_empty() {
+            if source_page.is_none() || node.source_id == source_page || node.source_id.as_deref() == Some("clipboard:loose") {
+                roots.extend(&node.children);
+            }
+        } else {
+            doc.walk(page, |node, depth| {
+                if depth > 0 && node.source_id.as_ref().is_some_and(|id| selected.contains(id)) {
+                    roots.push(node.id);
+                }
+            });
+        }
+    }
+    // Nested selections only need the ancestor because paste includes its subtree.
+    let layer_ids: HashSet<_> = roots.iter().copied().collect();
+    roots.retain(|id| {
+        let mut parent = doc.get(*id).and_then(|node| node.parent);
+        while let Some(ancestor) = parent {
+            if layer_ids.contains(&ancestor) {
+                return false;
+            }
+            parent = doc.get(ancestor).and_then(|node| node.parent);
+        }
+        true
+    });
+    if roots.is_empty() {
+        return Err(FigError::Format("no selected layers found in the clipboard data".into()));
+    }
+    Ok((doc, roots))
 }
 
 // ------------------------------------------------------------------ tree
@@ -191,13 +242,17 @@ impl<'a> Lk<'a> {
 
 /// Builds the REST-shaped `{name, document, ...}` value from a decoded message.
 pub(crate) fn message_to_rest(msg: &KiwiValue, name: &str) -> Value {
+    decoded_to_rest(msg, name, false)
+}
+
+fn decoded_to_rest(msg: &KiwiValue, name: &str, clipboard: bool) -> Value {
     let blobs: Vec<&[u8]> = msg
         .get("blobs")
         .and_then(KiwiValue::as_array)
         .map(|a| a.iter().map(|b| b.get("bytes").and_then(KiwiValue::as_bytes).unwrap_or(&[])).collect())
         .unwrap_or_default();
     let changes: Vec<Value> = msg.get("nodeChanges").and_then(KiwiValue::as_array).unwrap_or(&[]).iter().map(kiwi::to_json).collect();
-    nodes_to_rest(changes, &blobs, name)
+    nodes_to_rest(changes, &blobs, name, clipboard)
 }
 
 /// Imports node changes given as kiwi-shaped JSON (`[{guid, parentIndex, type, ...}]`,
@@ -205,11 +260,11 @@ pub(crate) fn message_to_rest(msg: &KiwiValue, name: &str) -> Value {
 #[doc(hidden)]
 pub fn import_fig_node_changes(changes: &Value, name: &str) -> Result<Document, FigError> {
     let list = changes.as_array().cloned().unwrap_or_default();
-    let rest = nodes_to_rest(list, &[], name);
+    let rest = nodes_to_rest(list, &[], name, false);
     rest_import::import_rest_value(&rest, true)
 }
 
-fn nodes_to_rest(changes: Vec<Value>, blobs: &[&[u8]], name: &str) -> Value {
+fn nodes_to_rest(changes: Vec<Value>, blobs: &[&[u8]], name: &str, clipboard: bool) -> Value {
     let mut entries: Vec<Entry> = Vec::new();
     for j in changes {
         if fstr(&j, "phase") == Some("REMOVED") {
@@ -243,7 +298,7 @@ fn nodes_to_rest(changes: Vec<Value>, blobs: &[&[u8]], name: &str) -> Value {
     let lk = Lk::new(&entries, blobs);
     let mut visited: HashSet<usize> = HashSet::new();
     let is_internal = |i: usize| entries[i].json.get("internalOnly").and_then(Value::as_bool) == Some(true);
-    let pages: Vec<Value> = canvases
+    let mut pages: Vec<Value> = canvases
         .iter()
         .copied()
         .filter(|&i| !is_internal(i))
@@ -262,6 +317,19 @@ fn nodes_to_rest(changes: Vec<Value>, blobs: &[&[u8]], name: &str) -> Value {
         .filter_map(|i| build(&entries, &children, &lk, i, &mut visited, 0))
         .filter(|p| p.get("children").and_then(Value::as_array).is_some_and(|c| !c.is_empty()))
         .collect();
+
+    if clipboard {
+        // A copied subtree may refer to a parent that was outside the selection.
+        roots.sort_by(|&a, &b| entries[a].pos.cmp(&entries[b].pos));
+        let loose: Vec<_> = roots
+            .into_iter()
+            .filter(|&i| !matches!(fstr(&entries[i].json, "type"), Some("DOCUMENT" | "CANVAS")) && !is_internal(i))
+            .filter_map(|i| build(&entries, &children, &lk, i, &mut visited, 0))
+            .collect();
+        if !loose.is_empty() {
+            pages.push(json!({"id": "clipboard:loose", "name": "Clipboard layers", "type": "CANVAS", "children": loose}));
+        }
+    }
 
     let var_entries: Vec<&Value> = entries.iter().map(|e| &e.json).filter(|j| matches!(fstr(j, "type"), Some("VARIABLE_SET" | "VARIABLE"))).collect();
     let mut out = json!({

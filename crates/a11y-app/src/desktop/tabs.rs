@@ -4,7 +4,7 @@ use crate::{
     app::{App, View},
     theme,
 };
-use a11y_doc::NodeId;
+use a11y_doc::{Document, NodeId};
 use egui::{Rect, Sense, Stroke, Ui, UiBuilder, Vec2, WidgetInfo, WidgetType};
 
 pub(crate) const HEIGHT: f32 = 38.0;
@@ -16,6 +16,7 @@ struct Tab {
     id: String,
     name: String,
     view: Option<TabView>,
+    shared: bool,
 }
 
 struct TabView {
@@ -27,18 +28,82 @@ struct TabView {
 
 #[derive(Default)]
 pub(crate) struct Tabs {
+    pub(crate) shared: Option<ParkedSharedTab>,
     documents: Vec<Tab>,
     previews: crate::home::thumb::Textures,
 }
 
+/// The joined editor continues to receive edits while a library file is on screen.
+pub(crate) struct ParkedSharedTab {
+    pub(crate) editor: Box<App>,
+}
+
+impl Drop for ParkedSharedTab {
+    fn drop(&mut self) {
+        self.editor.end_collab();
+    }
+}
+
 impl App {
+    pub(crate) fn can_park_shared_tab(&self) -> bool {
+        cfg!(feature = "enhanced-desktop") && self.collab.is_guest() && self.lib_file.is_none() && self.desktop_tabs.shared.is_none()
+    }
+
+    pub(crate) fn park_shared_tab(&mut self) {
+        crate::decks::ui::flush_notes(self);
+        self.canvas.reset_interaction();
+        let author = self.author();
+        let doc = std::mem::replace(&mut self.doc, Document::new(""));
+        let mut editor = Box::new(App::new(doc));
+        editor.comments.author = Some(author);
+        editor.now = self.now;
+        self.swap_shared_view(&mut editor);
+        self.desktop_tabs.shared = Some(ParkedSharedTab { editor });
+    }
+
+    pub(crate) fn restore_shared_editor(&mut self, mut tab: ParkedSharedTab) {
+        self.save_close_version();
+        let doc = std::mem::replace(&mut tab.editor.doc, Document::new(""));
+        self.replace_document(doc, None);
+        self.swap_shared_view(&mut tab.editor);
+        self.sanitize();
+        self.changed();
+        self.ui.menu = None;
+        self.ui.ctx_menu = None;
+        self.toast = tab.editor.toast.take();
+    }
+
+    // Move the shared editor state without moving window-wide settings or the clipboard.
+    fn swap_shared_view(&mut self, editor: &mut App) {
+        use std::mem::swap;
+        swap(&mut self.collab, &mut editor.collab);
+        swap(&mut self.document_session, &mut editor.document_session);
+        swap(&mut self.file_hash, &mut editor.file_hash);
+        swap(&mut self.hist, &mut editor.hist);
+        swap(&mut self.page, &mut editor.page);
+        swap(&mut self.selection, &mut editor.selection);
+        swap(&mut self.view, &mut editor.view);
+        swap(&mut self.canvas, &mut editor.canvas);
+        swap(&mut self.canvas_rect, &mut editor.canvas_rect);
+        swap(&mut self.first_fit_done, &mut editor.first_fit_done);
+        swap(&mut self.fonts, &mut editor.fonts);
+        swap(&mut self.tool, &mut editor.tool);
+        swap(&mut self.layers, &mut editor.layers);
+        swap(&mut self.board, &mut editor.board);
+        swap(&mut self.decks, &mut editor.decks);
+        swap(&mut self.motion, &mut editor.motion);
+        swap(&mut self.motion_ins, &mut editor.motion_ins);
+        swap(&mut self.pasted_components, &mut editor.pasted_components);
+        swap(&mut self.ui.dev_mode, &mut editor.ui.dev_mode);
+    }
+
     pub(crate) fn remember_document_tab(&mut self) {
         if !cfg!(feature = "enhanced-desktop") {
             return;
         }
         let Some(file) = &self.lib_file else { return };
         if self.desktop_tabs.documents.iter().all(|tab| tab.id != file.id) {
-            self.desktop_tabs.documents.push(Tab { id: file.id.clone(), name: file.name.clone(), view: None });
+            self.desktop_tabs.documents.push(Tab { id: file.id.clone(), name: file.name.clone(), view: None, shared: false });
         }
     }
 
@@ -70,6 +135,7 @@ impl App {
 
 enum Action {
     Home,
+    ResumeGuest,
     CloseGuest,
     Open(String),
     Close(String),
@@ -100,12 +166,15 @@ pub(crate) fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
     let mut action = None;
     let home = app.home.is_some();
     let active = app.lib_file.as_ref().filter(|_| !home);
-    let guest = (!home && active.is_none() && app.collab.is_guest()).then(|| Tab {
-        id: format!("guest:{}", app.document_session),
-        name: app.doc.name.clone(),
+    let guest_editor = if app.collab.is_guest() { Some(&*app) } else { app.desktop_tabs.shared.as_ref().map(|tab| tab.editor.as_ref()) };
+    let guest = guest_editor.map(|editor| Tab {
+        id: format!("guest:{}", editor.document_session),
+        name: editor.doc.name.clone(),
         view: None,
+        shared: true,
     });
-    let active_id = active.map(|file| file.id.as_str()).or_else(|| guest.as_ref().map(|tab| tab.id.as_str()));
+    let guest_active = app.collab.is_guest() && !home;
+    let active_id = active.map(|file| file.id.as_str()).or_else(|| guest.as_ref().filter(|_| guest_active).map(|tab| tab.id.as_str()));
     let reveal_key = ui.id().with("desktop-last-active-tab");
     let reveal = ui.data_mut(|data| {
         let previous = data.get_temp::<String>(reveal_key);
@@ -133,7 +202,7 @@ pub(crate) fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
         egui::ScrollArea::horizontal().id_salt("desktop-document-tabs").auto_shrink([false, true]).show(&mut strip, |ui| {
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                let Tabs { documents, previews } = &mut app.desktop_tabs;
+                let Tabs { documents, previews, .. } = &mut app.desktop_tabs;
                 for tab in documents {
                     let current = active.filter(|file| file.id == tab.id);
                     let name = current.map_or(tab.name.as_str(), |file| file.name.as_str());
@@ -148,19 +217,23 @@ pub(crate) fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
                     }
                 }
                 if let Some(tab) = &guest {
-                    let (_, closed, rect) = document_button(ui, tab, &tab.name, true, width, None, previews);
-                    if reveal {
+                    let (selected, closed, rect) = document_button(ui, tab, &tab.name, guest_active, width, None, previews);
+                    if guest_active && reveal {
                         ui.scroll_to_rect(rect, None);
                     }
                     if closed {
                         action = Some(Action::CloseGuest);
+                    } else if selected && !guest_active {
+                        action = Some(Action::ResumeGuest);
                     }
                 }
             });
         });
     }
     match action {
-        Some(Action::Home | Action::CloseGuest) => app.go_home(),
+        Some(Action::Home) => app.open_desktop_home(),
+        Some(Action::ResumeGuest) => app.resume_shared_tab(),
+        Some(Action::CloseGuest) => app.close_shared_tab(),
         Some(Action::Open(id)) => {
             app.open_library_file(&id);
             if app.home.is_none() && app.lib_file.as_ref().is_some_and(|file| file.id == id) {
@@ -203,8 +276,9 @@ fn document_button(
     // Reserve the close-button width in both states so selection doesn't move other tabs.
     let width = (crate::widgets::text_width(ui.painter(), name, &font) + 40.0).ceil().clamp(MIN_TAB_WIDTH, width_limit);
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, HEIGHT), Sense::hover());
+    let show_close = active || (tab.shared && ui.rect_contains_pointer(rect));
     let mut label_rect = rect;
-    if active {
+    if show_close {
         label_rect.max.x -= 24.0;
     }
     let response = ui.interact(label_rect, ui.id().with(("document-tab", &tab.id)), Sense::click());
@@ -221,7 +295,7 @@ fn document_button(
     }
     let open = response.clicked();
     let mut closed = false;
-    if active {
+    if show_close {
         let close_rect = Rect::from_min_max(label_rect.right_top(), rect.right_bottom());
         let close = ui.interact(close_rect, ui.id().with(("close-document-tab", &tab.id)), Sense::click());
         close.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, format!("Close {name}")));
