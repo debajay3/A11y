@@ -10,14 +10,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{new_id, write_atomic, Library, LibraryError, Result};
 
-pub const LOGO_SIDE: usize = 48;
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Organization {
     pub id: String,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub logo: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -64,39 +60,18 @@ impl Workspace {
     }
 
     pub fn create(&mut self, name: &str) -> Result<Library> {
-        self.create_with_logo(name, None)
-    }
-
-    pub fn create_with_logo(&mut self, name: &str, logo: Option<Vec<u8>>) -> Result<Library> {
-        let name = self.validate_details(None, name, logo.as_deref())?;
-        let mut next = self.catalog.clone();
-        let id = new_id();
-        next.organizations.push(Organization { id: id.clone(), name: name.to_owned(), logo });
-        next.active = Some(id);
-        self.apply(next)
-    }
-
-    pub fn edit(&mut self, id: &str, name: &str, logo: Option<Vec<u8>>) -> Result<()> {
-        let name = self.validate_details(Some(id), name, logo.as_deref())?;
-        let mut next = self.catalog.clone();
-        let org = next.organizations.iter_mut().find(|org| org.id == id).ok_or_else(|| LibraryError::NotFound("organization".into()))?;
-        org.name = name.to_owned();
-        org.logo = logo;
-        self.save(next)
-    }
-
-    fn validate_details<'a>(&self, id: Option<&str>, name: &'a str, logo: Option<&[u8]>) -> Result<&'a str> {
         let name = name.trim();
         if name.is_empty() {
             return Err(LibraryError::Invalid("Enter an organization name".into()));
         }
-        if self.organizations().iter().any(|org| Some(org.id.as_str()) != id && org.name.to_lowercase() == name.to_lowercase()) {
+        if self.organizations().iter().any(|org| org.name.to_lowercase() == name.to_lowercase()) {
             return Err(LibraryError::Invalid("An organization with that name already exists".into()));
         }
-        if logo.is_some_and(|pixels| pixels.len() != LOGO_SIDE * LOGO_SIDE * 4) {
-            return Err(LibraryError::Invalid("Invalid organization logo".into()));
-        }
-        Ok(name)
+        let mut next = self.catalog.clone();
+        let id = new_id();
+        next.organizations.push(Organization { id: id.clone(), name: name.to_owned() });
+        next.active = Some(id);
+        self.apply(next)
     }
 
     pub fn select(&mut self, id: Option<String>) -> Result<Library> {
@@ -110,16 +85,11 @@ impl Workspace {
 
     fn apply(&mut self, next: Catalog) -> Result<Library> {
         let library = Library::open(self.root_for(next.active.as_deref()))?;
-        self.save(next)?;
-        Ok(library)
-    }
-
-    fn save(&mut self, next: Catalog) -> Result<()> {
         let path = Self::catalog_path(&self.local_root);
         // Commit the selection before updating the active workspace in memory.
         write_atomic(&path, &serde_json::to_vec_pretty(&next)?)?;
         self.catalog = next;
-        Ok(())
+        Ok(library)
     }
 
     fn catalog_path(root: &Path) -> PathBuf {

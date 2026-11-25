@@ -250,7 +250,6 @@ pub enum Act {
     SignOut,
     Admin,
     NewOrganization,
-    EditOrganization(String),
     SwitchOrganization(Option<String>),
     NewProject,
     RenameProject(String),
@@ -365,7 +364,10 @@ pub fn context_entries(h: &Home, target: &Target) -> Vec<(crate::widgets::menu::
         ],
         Target::Folder(p, f) => {
             let nested = h.snap.projects.iter().find(|x| &x.id == p).and_then(|pr| pr.folders.iter().find(|x| &x.id == f)).is_some_and(|x| x.parent.is_some());
-            let mut v = vec![(MenuItem::new("Rename"), Act::RenameFolder(p.clone(), f.clone()))];
+            let mut v = vec![
+                (MenuItem::new("New subfolder"), Act::NewFolder(p.clone(), Some(f.clone()))),
+                (MenuItem::new("Rename"), Act::RenameFolder(p.clone(), f.clone())),
+            ];
             if nested {
                 v.push((MenuItem::new("Move to top level"), Act::FolderToTop(p.clone(), f.clone())));
             }
@@ -497,14 +499,7 @@ pub fn apply(app: &mut App, act: Act) {
             app.accounts.admin_open = true;
         }
         Act::SignOut => app.sign_out_workspace(),
-        Act::NewOrganization => app.dialog = Some(Dialog::prompt(Intent::NewOrganization, "Create organization", "", "Create")),
-        Act::EditOrganization(id) => {
-            if let Some(org) = app.organizations.as_ref().and_then(|workspace| workspace.organizations().iter().find(|org| org.id == id)) {
-                let mut dialog = Dialog::prompt(Intent::EditOrganization(id.clone()), "Edit organization", &org.name, "Save");
-                dialog.organization_logo = org.logo.clone();
-                app.dialog = Some(dialog);
-            }
-        }
+        Act::NewOrganization => app.dialog = Some(Dialog::prompt(Intent::NewOrganization, "New organization", "", "Create")),
         Act::SwitchOrganization(id) => {
             app.switch_organization(id);
             return;
