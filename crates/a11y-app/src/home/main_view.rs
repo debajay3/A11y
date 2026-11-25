@@ -41,7 +41,11 @@ pub fn show(lib: &Library, h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec
         let label_rect = Rect::from_min_max(Pos2::new(badge.right() + 10.0, head.top()), Pos2::new(head.right() - 160.0, head.bottom()));
         p.with_clip_rect(label_rect).text(label_rect.left_center(), Align2::LEFT_CENTER, name, theme::font_title(), theme::TEXT);
     } else if cfg!(feature = "enhanced-desktop") {
-        let icon = if matches!(h.section, Section::Project(..)) { Icon::Folder } else { Icon::File };
+        let icon = match (&h.section, h.searching()) {
+            (Section::Project(_, None), false) => Icon::Project,
+            (Section::Project(_, Some(_)), false) => Icon::Folder,
+            _ => Icon::File,
+        };
         let title = if !h.searching() { h.folders_title().unwrap_or_else(|| h.title()) } else { h.title() };
         icons::paint(&p, icon, origin + Vec2::new(14.0, 0.0), 24.0, theme::ICON_SECONDARY);
         let title_area = Rect::from_min_max(Pos2::new(origin.x + 36.0, head.top()), Pos2::new(head.right() - 390.0, head.bottom()));
@@ -67,10 +71,10 @@ pub fn show(lib: &Library, h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec
             acts.push(Act::NewFile);
         }
         if cfg!(feature = "enhanced-desktop") {
-            if let Section::Project(project, folder) = &h.section {
+            if let Section::Project(project, None) = &h.section {
                 right -= 8.0;
                 if button(ui, &p, &mut right, head.center().y, "New folder", Kind::Secondary, "home-new-folder").clicked() {
-                    acts.push(Act::NewFolder(project.clone(), folder.clone()));
+                    acts.push(Act::NewFolder(project.clone(), None));
                 }
             }
         }
@@ -578,7 +582,7 @@ fn trash_view(h: &mut Home, ui: &mut Ui, content: Rect, acts: &mut Vec<Act>) {
                 p.rect_filled(r, theme::cr(theme::RADIUS_MEDIUM), theme::BG_HOVER);
             }
             let is_file = it.kind == a11y_library::TrashKind::File;
-            icons::paint(&p, if is_file { Icon::File } else { Icon::Frame }, Pos2::new(r.left() + 24.0, r.center().y), 20.0, theme::ICON_SECONDARY);
+            icons::paint(&p, if is_file { Icon::File } else { Icon::Project }, Pos2::new(r.left() + 24.0, r.center().y), 20.0, theme::ICON_SECONDARY);
             p.text(Pos2::new(r.left() + 48.0, r.center().y - 9.0), Align2::LEFT_CENTER, &it.name, theme::font_body_strong(), theme::TEXT);
             let from = match (&it.project_name, is_file) {
                 (Some(pn), true) => format!("Deleted {} \u{b7} from {pn}", relative(now, it.trashed)),

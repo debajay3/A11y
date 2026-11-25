@@ -126,7 +126,7 @@ pub fn show(
             }
             let selected = !h.searching() && h.section == tr.section;
             let drop_hover = dragging && ptr.is_some_and(|p| r.contains(p) && list.contains(p));
-            let icon = if tr.folder { Icon::Folder } else { Icon::Frame };
+            let icon = if tr.folder { Icon::Folder } else { Icon::Project };
             let resp =
                 row(ui, r, Id::new(("home-tree", &tr.key)), icon, &tr.label, tr.depth as f32 * INDENT, selected, drop_hover, &format!("project-{}", tr.label));
             // chevron for projects with folders

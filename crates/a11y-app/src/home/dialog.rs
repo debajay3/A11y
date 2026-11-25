@@ -11,6 +11,7 @@ use egui::{Align2, Color32, Context, Id, Key, Modifiers, Order, Pos2, Rect, Sens
 #[derive(Clone, Debug, PartialEq)]
 pub enum Intent {
     NewOrganization,
+    EditOrganization(String),
     NewProject,
     RenameProject(String),
     NewFolder(String, Option<String>),
@@ -50,6 +51,7 @@ pub struct Dialog {
     pub lines: Vec<(String, String)>,
     /// Text field content (for prompts).
     pub input: Option<String>,
+    pub(crate) organization_logo: Option<Vec<u8>>,
     pub choices: Vec<Choice>,
     pub picked: Option<usize>,
     pub ok: String,
@@ -73,6 +75,7 @@ impl Dialog {
             title: title.into(),
             lines: vec![],
             input: None,
+            organization_logo: None,
             choices: vec![],
             picked: None,
             ok: ok.into(),
@@ -203,6 +206,7 @@ impl App {
 /// Draws the open dialog (if any) and runs its outcome. Call once per frame.
 pub fn show(app: &mut App, ctx: &Context) {
     let Some(mut d) = app.dialog.take() else { return };
+    let organization = matches!(&d.intent, Intent::NewOrganization | Intent::EditOrganization(_));
     let screen = ctx.content_rect();
     let font = theme::font_body();
     let (enter, esc) = ctx.input_mut(|i| (i.consume_key(Modifiers::NONE, Key::Enter), i.consume_key(Modifiers::NONE, Key::Escape)));
@@ -218,6 +222,9 @@ pub fn show(app: &mut App, ctx: &Context) {
     let mut h = PAD + 24.0 + 12.0 + lines_h;
     if d.input.is_some() {
         h += 32.0 + 12.0;
+    }
+    if organization {
+        h += 82.0;
     }
     if !d.choices.is_empty() {
         h += visible_choices as f32 * ROW_H + 12.0;
@@ -252,6 +259,10 @@ pub fn show(app: &mut App, ctx: &Context) {
             }
         }
         if let Some(text) = d.input.as_mut() {
+            if organization {
+                p.text(Pos2::new(x0, y + 9.0), Align2::LEFT_CENTER, "Organization name", font.clone(), theme::TEXT);
+                y += 22.0;
+            }
             let r = Rect::from_min_size(Pos2::new(x0, y), Vec2::new(text_w, 32.0));
             p.rect_filled(r, theme::cr(theme::RADIUS_MEDIUM), theme::BG_SECONDARY);
             let id = Id::new("dialog-input");
@@ -273,6 +284,11 @@ pub fn show(app: &mut App, ctx: &Context) {
                 d.fresh = false;
             }
             y += 32.0 + 12.0;
+        }
+        if organization {
+            let name = d.input.as_deref().filter(|name| !name.trim().is_empty()).unwrap_or("Organization");
+            crate::organizations::logo::field(ui, Pos2::new(x0, y), name, &mut d.organization_logo, app);
+            y += 60.0;
         }
         if !d.choices.is_empty() {
             let list = Rect::from_min_size(Pos2::new(x0, y), Vec2::new(text_w, visible_choices as f32 * ROW_H));
@@ -298,7 +314,7 @@ pub fn show(app: &mut App, ctx: &Context) {
                     let ix = row.left() + 12.0 + c.depth as f32 * 16.0;
                     crate::icons::paint(
                         &p,
-                        if c.folder.is_some() { crate::icons::Icon::Folder } else { crate::icons::Icon::Frame },
+                        if c.folder.is_some() { crate::icons::Icon::Folder } else { crate::icons::Icon::Project },
                         Pos2::new(ix + 8.0, row.center().y),
                         16.0,
                         theme::ICON,
@@ -383,7 +399,13 @@ pub fn finish(app: &mut App, d: Dialog) {
     let mut dirty = true;
     let res: a11y_library::Result<()> = match d.intent.clone() {
         Intent::NewOrganization => {
-            if !app.create_organization(&text) {
+            if !app.create_organization_with_logo(&text, d.organization_logo.clone()) {
+                app.dialog = Some(d);
+            }
+            return;
+        }
+        Intent::EditOrganization(id) => {
+            if !app.edit_organization(&id, &text, d.organization_logo.clone()) {
                 app.dialog = Some(d);
             }
             return;
