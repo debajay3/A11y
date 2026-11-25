@@ -102,6 +102,7 @@ pub enum Icon {
     Flag,
     Play,
     // projects library
+    Project,
     Folder,
     Trash,
     Clock,
@@ -157,6 +158,7 @@ impl Icon {
         Icon::Tools,
         Icon::Variables,
         Icon::Help,
+        Icon::Project,
         Icon::Folder,
         Icon::Trash,
         Icon::Clock,
@@ -281,6 +283,7 @@ impl Icon {
         Some(match self {
             Icon::Logo => return None,
             Icon::File => "file",
+            Icon::Project => "project",
             Icon::Folder => "folder",
             Icon::Trash => "trash-2",
             Icon::Clock => "clock",
@@ -425,6 +428,7 @@ lucide!(
     "wrench",
     "hexagon",
     "circle-help",
+    "project",
     "folder",
     "trash-2",
     "clock",
@@ -639,7 +643,7 @@ mod tests {
         for i in Icon::ALL {
             assert!(seen.insert(*i), "{i:?} listed twice");
         }
-        assert_eq!(seen.len(), 123);
+        assert_eq!(seen.len(), 124);
     }
 
     #[test]

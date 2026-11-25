@@ -1,5 +1,6 @@
 //! Organization selection for the native home screen.
 
+pub(crate) mod logo;
 pub(crate) mod projects;
 pub(crate) mod ui;
 
@@ -38,7 +39,12 @@ impl App {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn create_organization(&mut self, name: &str) -> bool {
+        self.create_organization_with_logo(name, None)
+    }
+
+    pub(crate) fn create_organization_with_logo(&mut self, name: &str, logo: Option<Vec<u8>>) -> bool {
         if self.home.is_none() {
             self.go_home();
             if self.home.is_none() {
@@ -46,8 +52,22 @@ impl App {
             }
         }
         let Some(workspace) = self.organizations.as_mut() else { return false };
-        let result = workspace.create(name);
+        let result = workspace.create_with_logo(name, logo);
         self.apply_workspace(result)
+    }
+
+    pub(crate) fn edit_organization(&mut self, id: &str, name: &str, logo: Option<Vec<u8>>) -> bool {
+        let Some(workspace) = self.organizations.as_mut() else { return false };
+        match workspace.edit(id, name, logo) {
+            Ok(()) => {
+                self.show_toast("Organization updated", false);
+                true
+            }
+            Err(error) => {
+                self.show_toast(error.to_string(), true);
+                false
+            }
+        }
     }
 
     fn apply_workspace(&mut self, result: a11y_library::Result<Library>) -> bool {

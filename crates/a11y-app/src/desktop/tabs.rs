@@ -8,6 +8,9 @@ use a11y_doc::NodeId;
 use egui::{Rect, Sense, Stroke, Ui, UiBuilder, Vec2, WidgetInfo, WidgetType};
 
 pub(crate) const HEIGHT: f32 = 38.0;
+const HOME_WIDTH: f32 = 42.0;
+const MIN_TAB_WIDTH: f32 = 78.0;
+const MAX_TAB_WIDTH: f32 = 116.0;
 
 struct Tab {
     id: String,
@@ -67,6 +70,7 @@ impl App {
 
 enum Action {
     Home,
+    CloseGuest,
     Open(String),
     Close(String),
 }
@@ -80,7 +84,7 @@ pub(crate) fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
     } else if drag.drag_started() {
         ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
     }
-    let mut content = rect.shrink2(Vec2::new(7.0, 5.0));
+    let mut content = rect;
     if cfg!(target_os = "macos") && !ui.input(|i| i.viewport().fullscreen.unwrap_or(false)) {
         content.min.x = rect.left() + 80.0;
     }
@@ -96,29 +100,67 @@ pub(crate) fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
     let mut action = None;
     let home = app.home.is_some();
     let active = app.lib_file.as_ref().filter(|_| !home);
-    bar.horizontal(|ui| {
-        if home_button(ui, home) && !home {
-            action = Some(Action::Home);
+    let guest = (!home && active.is_none() && app.collab.is_guest()).then(|| Tab {
+        id: format!("guest:{}", app.document_session),
+        name: app.doc.name.clone(),
+        view: None,
+    });
+    let active_id = active.map(|file| file.id.as_str()).or_else(|| guest.as_ref().map(|tab| tab.id.as_str()));
+    let reveal_key = ui.id().with("desktop-last-active-tab");
+    let reveal = ui.data_mut(|data| {
+        let previous = data.get_temp::<String>(reveal_key);
+        let changed = previous.as_deref() != active_id;
+        if changed {
+            if let Some(id) = active_id {
+                data.insert_temp(reveal_key, id.to_owned());
+            } else {
+                data.remove::<String>(reveal_key);
+            }
         }
-        ui.separator();
-        egui::ScrollArea::horizontal().id_salt("desktop-document-tabs").show(ui, |ui| {
-            ui.horizontal(|ui| {
+        changed
+    });
+    let home_rect = Rect::from_min_size(content.min, Vec2::new(HOME_WIDTH.min(content.width()), content.height()));
+    if home_button(&mut bar, home_rect, home) && !home {
+        action = Some(Action::Home);
+    }
+
+    let strip_rect = Rect::from_min_max(home_rect.right_top(), content.max);
+    let count = app.desktop_tabs.documents.len() + guest.iter().len();
+    if count > 0 && strip_rect.width() > 0.0 {
+        let width = (strip_rect.width() / count as f32).clamp(MIN_TAB_WIDTH, MAX_TAB_WIDTH);
+        let mut strip = bar.new_child(UiBuilder::new().max_rect(strip_rect));
+        strip.set_clip_rect(strip_rect);
+        egui::ScrollArea::horizontal().id_salt("desktop-document-tabs").auto_shrink([false, true]).show(&mut strip, |ui| {
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
                 let Tabs { documents, previews } = &mut app.desktop_tabs;
                 for tab in documents {
                     let current = active.filter(|file| file.id == tab.id);
                     let name = current.map_or(tab.name.as_str(), |file| file.name.as_str());
-                    let (selected, closed) = document_button(ui, tab, name, current.is_some(), app.lib.as_ref(), previews);
+                    let (selected, closed, rect) = document_button(ui, tab, name, current.is_some(), width, app.lib.as_ref(), previews);
+                    if current.is_some() && reveal {
+                        ui.scroll_to_rect(rect, None);
+                    }
                     if closed {
                         action = Some(Action::Close(tab.id.clone()));
                     } else if selected && current.is_none() {
                         action = Some(Action::Open(tab.id.clone()));
                     }
                 }
+                if let Some(tab) = &guest {
+                    let (_, closed, rect) = document_button(ui, tab, &tab.name, true, width, None, previews);
+                    if reveal {
+                        ui.scroll_to_rect(rect, None);
+                    }
+                    if closed {
+                        action = Some(Action::CloseGuest);
+                    }
+                }
             });
         });
-    });
+    }
     match action {
-        Some(Action::Home) => app.go_home(),
+        Some(Action::Home | Action::CloseGuest) => app.go_home(),
         Some(Action::Open(id)) => {
             app.open_library_file(&id);
             if app.home.is_none() && app.lib_file.as_ref().is_some_and(|file| file.id == id) {
@@ -138,16 +180,17 @@ fn tab_background(ui: &Ui, rect: Rect, active: bool, hovered: bool) {
     let color = if active {
         theme::BG_MENU
     } else if hovered {
-        theme::BG_TERTIARY
-    } else {
         theme::BG_SECONDARY
+    } else {
+        theme::BG_TERTIARY
     };
     let painter = ui.painter();
-    painter.rect_filled(rect, theme::cr(theme::RADIUS_MEDIUM), color);
-    if active {
-        painter
-            .line_segment([rect.left_bottom() + Vec2::new(5.0, -1.0), rect.right_bottom() + Vec2::new(-5.0, -1.0)], Stroke::new(2.0, theme::BORDER_SELECTED));
-    }
+    painter.rect_filled(rect, 0.0, color);
+    let divider_x = rect.right() - 0.5;
+    painter.line_segment(
+        [egui::pos2(divider_x, rect.top()), egui::pos2(divider_x, rect.bottom())],
+        Stroke::new(1.0, theme::BORDER_TRANSLUCENT),
+    );
 }
 
 fn document_button(
@@ -155,10 +198,14 @@ fn document_button(
     tab: &Tab,
     name: &str,
     active: bool,
+    width_limit: f32,
     library: Option<&a11y_library::Library>,
     previews: &mut crate::home::thumb::Textures,
-) -> (bool, bool) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(128.0, 26.0), Sense::hover());
+) -> (bool, bool, Rect) {
+    let font = theme::font_body();
+    // Reserve the close-button width in both states so selection doesn't move other tabs.
+    let width = (crate::widgets::text_width(ui.painter(), name, &font) + 40.0).ceil().clamp(MIN_TAB_WIDTH, width_limit);
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, HEIGHT), Sense::hover());
     let mut label_rect = rect;
     if active {
         label_rect.max.x -= 24.0;
@@ -170,7 +217,11 @@ fn document_button(
 
     let color = if active || hovered { theme::TEXT } else { theme::TEXT_SECONDARY };
     let text_rect = label_rect.shrink2(Vec2::new(8.0, 0.0));
-    ui.painter().with_clip_rect(text_rect).text(text_rect.left_center(), egui::Align2::LEFT_CENTER, name, theme::font_body(), color);
+    let title = crate::widgets::elide(ui.painter(), name, &font, text_rect.width());
+    ui.painter().with_clip_rect(text_rect).text(text_rect.left_center(), egui::Align2::LEFT_CENTER, &title, font, color);
+    if response.has_focus() {
+        ui.painter().rect_stroke(label_rect.shrink(1.0), theme::cr(theme::RADIUS_MEDIUM), Stroke::new(1.0, theme::ICON_SECONDARY), egui::StrokeKind::Inside);
+    }
     let open = response.clicked();
     let mut closed = false;
     if active {
@@ -182,6 +233,9 @@ fn document_button(
         }
         ui.painter().text(close_rect.center(), egui::Align2::CENTER_CENTER, "×", theme::font_body(), theme::TEXT);
         closed = close.on_hover_text(format!("Close {name}")).clicked();
+        if title != name {
+            response.on_hover_text(name);
+        }
     } else if !open {
         response.on_hover_ui(|ui| {
             use crate::home::time::{edited, wall_ms};
@@ -207,11 +261,11 @@ fn document_button(
             }
         });
     }
-    (open, closed)
+    (open, closed, rect)
 }
 
-fn home_button(ui: &mut Ui, active: bool) -> bool {
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(34.0, 26.0), Sense::click());
+fn home_button(ui: &mut Ui, rect: Rect, active: bool) -> bool {
+    let response = ui.interact(rect, ui.id().with("desktop-home-tab"), Sense::click());
     response.widget_info(|| WidgetInfo::selected(WidgetType::SelectableLabel, true, active, "Home"));
     let painter = ui.painter();
     tab_background(ui, rect, active, response.hovered());

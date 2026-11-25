@@ -8,6 +8,13 @@
 use super::*;
 use egui::{Area, Key, Modifiers, Order};
 
+#[derive(Clone)]
+pub(crate) struct MenuBadge {
+    pub texture: Option<egui::TextureHandle>,
+    pub initial: String,
+    pub fill: Color32,
+}
+
 #[derive(Clone, Default)]
 pub struct MenuItem {
     pub label: String,
@@ -18,6 +25,7 @@ pub struct MenuItem {
     pub disabled: bool,
     pub separator_after: bool,
     pub icon: Option<Icon>,
+    pub(crate) badge: Option<MenuBadge>,
     pub children: Vec<MenuItem>,
 }
 
@@ -143,7 +151,7 @@ impl Layout {
 }
 
 fn label_x(it: &MenuItem, has_check: bool) -> f32 {
-    match (it.icon.is_some(), has_check) {
+    match (it.icon.is_some() || it.badge.is_some(), has_check) {
         (true, true) => theme::MENU_LABEL_X_ICON,
         (true, false) => theme::MENU_ICON_X_PLAIN + theme::MENU_ICON_BOX + theme::MENU_ICON_LABEL_GAP,
         (false, true) => theme::MENU_LABEL_X_CHECK,
@@ -324,9 +332,18 @@ pub fn popup_tree(ctx: &egui::Context, id: Id, pos: Pos2, min_w: f32, items: &[M
                 if it.checked {
                     icons::paint(&p, Icon::Check, Pos2::new(rect.left() + theme::MENU_CHECK_X + theme::MENU_CHECK_BOX / 2.0, cy), theme::MENU_ICON_SIZE, col);
                 }
-                if let Some(ic) = it.icon {
-                    let ix = if lay.has_check { theme::MENU_ICON_X_CHECKED } else { theme::MENU_ICON_X_PLAIN };
-                    icons::paint(&p, ic, Pos2::new(rect.left() + ix + theme::MENU_ICON_BOX / 2.0, cy), theme::MENU_ICON_SIZE, col);
+                let ix = if lay.has_check { theme::MENU_ICON_X_CHECKED } else { theme::MENU_ICON_X_PLAIN };
+                let center = Pos2::new(rect.left() + ix + theme::MENU_ICON_BOX / 2.0, cy);
+                if let Some(badge) = &it.badge {
+                    let avatar = Rect::from_center_size(center, Vec2::splat(theme::MENU_ICON_SIZE));
+                    if let Some(texture) = &badge.texture {
+                        p.image(texture.id(), avatar, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+                    } else {
+                        p.circle_filled(center, avatar.width() / 2.0, badge.fill);
+                        p.text(center, Align2::CENTER_CENTER, &badge.initial, egui::FontId::proportional(11.0), Color32::WHITE);
+                    }
+                } else if let Some(ic) = it.icon {
+                    icons::paint(&p, ic, center, theme::MENU_ICON_SIZE, col);
                 }
                 p.text(Pos2::new(rect.left() + label_x(it, lay.has_check), cy), Align2::LEFT_CENTER, crate::i18n::tr(&it.label), font.clone(), col);
                 if it.has_sub() {
