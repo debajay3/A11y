@@ -1,6 +1,10 @@
 //! Logo selection and display for the local organization catalog.
 
-use std::{fs::File, io::{Cursor, Read}, path::Path};
+use std::{
+    fs::File,
+    io::{Cursor, Read},
+    path::Path,
+};
 
 use a11y_library::organizations::LOGO_SIDE;
 use egui::{Align2, Color32, Id, Pos2, Rect, TextureHandle, Ui, Vec2};
@@ -64,9 +68,7 @@ pub(crate) fn field(ui: &mut Ui, origin: Pos2, name: &str, logo: &mut Option<Vec
             }
         }
     }
-    if logo.is_some()
-        && ui.put(Rect::from_min_size(origin + Vec2::new(153.0, 22.0), Vec2::new(105.0, 30.0)), egui::Button::new("Remove logo")).clicked()
-    {
+    if logo.is_some() && ui.put(Rect::from_min_size(origin + Vec2::new(153.0, 22.0), Vec2::new(105.0, 30.0)), egui::Button::new("Remove logo")).clicked() {
         *logo = None;
     }
 }

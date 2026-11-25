@@ -187,10 +187,7 @@ fn tab_background(ui: &Ui, rect: Rect, active: bool, hovered: bool) {
     let painter = ui.painter();
     painter.rect_filled(rect, 0.0, color);
     let divider_x = rect.right() - 0.5;
-    painter.line_segment(
-        [egui::pos2(divider_x, rect.top()), egui::pos2(divider_x, rect.bottom())],
-        Stroke::new(1.0, theme::BORDER_TRANSLUCENT),
-    );
+    painter.line_segment([egui::pos2(divider_x, rect.top()), egui::pos2(divider_x, rect.bottom())], Stroke::new(1.0, theme::BORDER_TRANSLUCENT));
 }
 
 fn document_button(

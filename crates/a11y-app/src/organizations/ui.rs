@@ -54,11 +54,7 @@ pub(crate) fn switcher(workspace: &Workspace, ui: &mut Ui, rect: Rect, anchor: &
         ];
         let color_index = org.id.bytes().map(usize::from).sum::<usize>() % colors.len();
         let key = Id::new(("organization-menu-logo", &org.id));
-        item.badge = Some(MenuBadge {
-            texture: super::logo::texture(ui.ctx(), key, org.logo.as_deref()),
-            initial,
-            fill: colors[color_index],
-        });
+        item.badge = Some(MenuBadge { texture: super::logo::texture(ui.ctx(), key, org.logo.as_deref()), initial, fill: colors[color_index] });
         item
     }));
     entries.last_mut().unwrap().separator_after = true;
