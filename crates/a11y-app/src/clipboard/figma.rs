@@ -1,9 +1,7 @@
 //! Transfers Figma clipboard layers and the definitions they refer to.
 
 use crate::{app::App, edit::Tx, layout};
-use a11y_doc::{
-    Action, Color, Command, DocError, Document, Expression, Node, NodeId, NodeKind, PropKind, PropValue, VariableValue, Vec2,
-};
+use a11y_doc::{Action, Color, Command, DocError, Document, Expression, Node, NodeId, NodeKind, PropKind, PropValue, VariableValue, Vec2};
 use std::collections::BTreeMap;
 
 type NodeMap = BTreeMap<NodeId, NodeId>;
@@ -34,12 +32,8 @@ pub(super) fn paste(app: &mut App, source: Document, roots: &[NodeId], at: Vec2)
         transfer_definitions(&mut tx, &mut app.doc, &source, &prefix)?;
         if !definitions.is_empty() {
             let page = components_page(&mut tx, &mut app.doc)?;
-            let mut y = app.doc.nodes[&page]
-                .children
-                .iter()
-                .filter_map(|id| app.doc.get(*id))
-                .map(|node| node.transform.ty + node.size.y + 48.0)
-                .fold(0.0, f32::max);
+            let mut y =
+                app.doc.nodes[&page].children.iter().filter_map(|id| app.doc.get(*id)).map(|node| node.transform.ty + node.size.y + 48.0).fold(0.0, f32::max);
             for root in definitions {
                 let mut nodes = copy_nodes(&source, root, &assets, &refs, &prefix);
                 nodes[0].transform.tx = 0.0;

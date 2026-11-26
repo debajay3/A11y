@@ -280,11 +280,7 @@ pub fn show(app: &mut App, ui: &mut Ui, region: Rect) {
             if row.has_children {
                 let open = app.layers.expanded.contains(&row.id);
                 let cr = ui.interact(chev, ui.id().with(("chev", row.id.0)), Sense::click());
-                let col = if is_sel || cr.hovered() {
-                    theme::ICON
-                } else {
-                    theme::ICON_TERTIARY
-                };
+                let col = if is_sel || cr.hovered() { theme::ICON } else { theme::ICON_TERTIARY };
                 icons::paint(&p, if open { Icon::ChevronDown } else { Icon::ChevronRight }, chev.center(), 12.0, col);
                 if cr.clicked() {
                     if open {

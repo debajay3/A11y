@@ -127,14 +127,10 @@ pub fn show(
                 continue;
             }
             let (icon, selected, drop_to) = match &tr.target {
-                Target::Project(project) => {
-                    (Icon::Project, h.section == Section::Project(project.clone(), None), Some(DropTo::Project(project.clone())))
+                Target::Project(project) => (Icon::Project, h.section == Section::Project(project.clone(), None), Some(DropTo::Project(project.clone()))),
+                Target::Folder(project, folder) => {
+                    (Icon::Folder, h.section == Section::Project(project.clone(), Some(folder.clone())), Some(DropTo::Folder(project.clone(), folder.clone())))
                 }
-                Target::Folder(project, folder) => (
-                    Icon::Folder,
-                    h.section == Section::Project(project.clone(), Some(folder.clone())),
-                    Some(DropTo::Folder(project.clone(), folder.clone())),
-                ),
                 Target::File(id) => (Icon::File, h.selected.as_ref() == Some(id), None),
             };
             let drop_hover = drop_to.is_some() && dragging && ptr.is_some_and(|p| r.contains(p) && list.contains(p));

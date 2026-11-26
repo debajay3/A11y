@@ -167,12 +167,7 @@ pub(crate) fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
     let home = app.home.is_some();
     let active = app.lib_file.as_ref().filter(|_| !home);
     let guest_editor = if app.collab.is_guest() { Some(&*app) } else { app.desktop_tabs.shared.as_ref().map(|tab| tab.editor.as_ref()) };
-    let guest = guest_editor.map(|editor| Tab {
-        id: format!("guest:{}", editor.document_session),
-        name: editor.doc.name.clone(),
-        view: None,
-        shared: true,
-    });
+    let guest = guest_editor.map(|editor| Tab { id: format!("guest:{}", editor.document_session), name: editor.doc.name.clone(), view: None, shared: true });
     let guest_active = app.collab.is_guest() && !home;
     let active_id = active.map(|file| file.id.as_str()).or_else(|| guest.as_ref().filter(|_| guest_active).map(|tab| tab.id.as_str()));
     let reveal_key = ui.id().with("desktop-last-active-tab");
