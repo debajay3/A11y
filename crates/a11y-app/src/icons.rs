@@ -13,7 +13,6 @@ use std::sync::{Arc, Mutex};
 pub enum Icon {
     Logo,
     File,
-    Assets,
     Tools,
     Variables,
     Help,
@@ -154,7 +153,6 @@ impl Icon {
     pub const ALL: &'static [Icon] = &[
         Icon::Logo,
         Icon::File,
-        Icon::Assets,
         Icon::Tools,
         Icon::Variables,
         Icon::Help,
@@ -290,7 +288,6 @@ impl Icon {
             Icon::GridView => "layout-grid",
             Icon::ListView => "list",
             Icon::Book => "book",
-            Icon::Assets => "library",
             Icon::Tools => "wrench",
             Icon::Variables => "hexagon",
             Icon::Help => "circle-help",
@@ -424,7 +421,6 @@ lucide!(
     "chevron-left",
     "chevrons-down-up",
     "file",
-    "library",
     "wrench",
     "hexagon",
     "circle-help",
@@ -649,7 +645,7 @@ mod tests {
         for i in Icon::ALL {
             assert!(seen.insert(*i), "{i:?} listed twice");
         }
-        assert_eq!(seen.len(), 124);
+        assert_eq!(seen.len(), 123);
     }
 
     #[test]
