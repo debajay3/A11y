@@ -14,7 +14,7 @@ use egui::{Align2, Color32, Context, Id, Key, Modifiers, Order, Pos2, Rect, Sens
 impl App {
     pub(crate) fn request_quit(&mut self, ctx: &Context) {
         let again = ctx.clone();
-        if !self.leave_ok(move |app| app.request_quit(&again)) {
+        if !self.leave_all_ok(move |app| app.request_quit(&again)) {
             return;
         }
         if self.edits_unsaved() {

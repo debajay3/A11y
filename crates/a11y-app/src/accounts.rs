@@ -272,6 +272,14 @@ impl App {
                     }
                 }
             }
+            if let Err(error) = self.save_parked_shared_recovery() {
+                self.accounts.error = error;
+            }
+            // Even if recovery fails, stop background networking; retain its document
+            // so the account-switch guard can retry before replacing the editor.
+            if let Some(tab) = &mut self.desktop_tabs.shared {
+                tab.editor.end_collab();
+            }
             self.accounts.applied = false;
             self.end_collab();
             self.stop_bridge();
@@ -299,6 +307,10 @@ impl App {
                         );
                         return true;
                     }
+                }
+                if let Err(error) = self.save_parked_shared_recovery() {
+                    ui.colored_label(theme::DANGER, error);
+                    return true;
                 }
                 let accounts = std::mem::take(&mut self.accounts);
                 self.end_collab();

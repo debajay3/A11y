@@ -1170,3 +1170,110 @@ fn over_real_network_a_severed_guest_comes_back_with_its_edits() {
     }
     host.stop_sharing();
 }
+
+// Lifecycle regressions: background shared drafts must survive offline exits.
+#[cfg(feature = "enhanced-desktop")]
+#[test]
+fn signout_must_not_discard_a_parked_shared_draft() {
+    let root = std::env::temp_dir().join(format!("a11y-review-signout-{}", uuid::Uuid::new_v4()));
+    let mut r = Rig::new(Role::Editor);
+    let library = a11y_library::Library::open(&root).unwrap();
+    let project = library.create_project("Local").unwrap();
+    let mut local = Document::new("Local");
+    local.add_page("Page");
+    let file = library.create_file(&project.id, None, "Local", &local).unwrap();
+    r.guest.lib = Some(library);
+    drop_connection(&r.net, 1);
+    r.run(0.3);
+    assert!(r.guest_state().reconnect.is_some());
+    r.guest.edit_nodes(&[r.a], |node| node.name = "Unsent work that must survive".into());
+    r.guest.open_library_file(&file.id);
+    r.run(0.1);
+    assert!(r.guest.desktop_tabs.shared.is_some());
+    assert_ne!(Rig::name(&r.host, r.a), "Unsent work that must survive");
+    r.guest.sign_out_workspace();
+    let guarded = r.guest.dialog.is_some() && r.guest.desktop_tabs.shared.is_some();
+    // Cancelling keeps the editor and unsynced changes; confirming saves before logout.
+    r.guest.dialog.take();
+    assert_eq!(Rig::name(&r.guest.desktop_tabs.shared.as_ref().unwrap().editor, r.a), "Unsent work that must survive");
+    r.guest.sign_out_workspace();
+    let dialog = r.guest.dialog.take().unwrap();
+    crate::home::dialog::finish(&mut r.guest, dialog);
+    assert!(r.guest.desktop_tabs.shared.is_none());
+    assert_shared_recovery(&root, r.a, "Unsent work that must survive");
+    drop(r);
+    let _ = std::fs::remove_dir_all(root);
+    assert!(guarded, "sign-out silently drops the parked shared document, without the existing leave confirmation or a recovery save");
+}
+
+#[cfg(feature = "enhanced-desktop")]
+#[test]
+fn quit_must_include_the_parked_shared_session() {
+    let root = std::env::temp_dir().join(format!("a11y-review-quit-{}", uuid::Uuid::new_v4()));
+    let mut r = Rig::new(Role::Editor);
+    let library = a11y_library::Library::open(&root).unwrap();
+    let project = library.create_project("Local").unwrap();
+    let mut local = Document::new("Local");
+    local.add_page("Page");
+    let file = library.create_file(&project.id, None, "Local", &local).unwrap();
+    r.guest.lib = Some(library);
+    drop_connection(&r.net, 1);
+    r.run(0.3);
+    assert!(r.guest_state().reconnect.is_some());
+    r.guest.edit_nodes(&[r.a], |node| node.name = "Unsent before quit".into());
+    r.guest.open_library_file(&file.id);
+    r.run(0.1);
+    r.guest.request_quit(&egui::Context::default());
+    let guarded = r.guest.dialog.is_some() || r.guest.pending_quit;
+    let dialog = r.guest.dialog.take().unwrap();
+    // Make the recovery directory unwritable by replacing it with a regular file.
+    let moved = root.with_extension("backup");
+    std::fs::rename(&root, &moved).unwrap();
+    std::fs::write(&root, "blocked").unwrap();
+    crate::home::dialog::finish(&mut r.guest, dialog);
+    assert!(r.guest.desktop_tabs.shared.is_some(), "a failed save must keep the draft open");
+    assert_eq!(Rig::name(&r.guest.desktop_tabs.shared.as_ref().unwrap().editor, r.a), "Unsent before quit");
+    std::fs::remove_file(&root).unwrap();
+    std::fs::rename(moved, &root).unwrap();
+    r.guest.request_quit(&egui::Context::default());
+    let dialog = r.guest.dialog.take().unwrap();
+    crate::home::dialog::finish(&mut r.guest, dialog);
+    assert!(r.guest.desktop_tabs.shared.is_none());
+    assert_shared_recovery(&root, r.a, "Unsent before quit");
+    drop(r);
+    let _ = std::fs::remove_dir_all(root);
+    assert!(guarded, "quit treats only the foreground autosaved file as open and skips the parked session's leave/save checks");
+}
+
+#[cfg(feature = "enhanced-desktop")]
+fn assert_shared_recovery(root: &std::path::Path, node: NodeId, expected: &str) {
+    let paths: Vec<_> = std::fs::read_dir(root)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.file_name().unwrap().to_string_lossy().starts_with("recovery-shared-"))
+        .collect();
+    assert_eq!(paths.len(), 1);
+    let doc = Document::from_json(&std::fs::read_to_string(&paths[0]).unwrap()).unwrap();
+    assert_eq!(doc.get(node).unwrap().name, expected);
+}
+
+#[cfg(feature = "enhanced-desktop")]
+#[test]
+fn ended_parked_shared_draft_is_recovered_when_closed() {
+    let root = std::env::temp_dir().join(format!("a11y-ended-draft-{}", uuid::Uuid::new_v4()));
+    let mut r = Rig::new(Role::Editor);
+    let library = a11y_library::Library::open(&root).unwrap();
+    let project = library.create_project("Local").unwrap();
+    let mut local = Document::new("Local");
+    local.add_page("Page");
+    let file = library.create_file(&project.id, None, "Local", &local).unwrap();
+    r.guest.lib = Some(library);
+    r.guest.edit_nodes(&[r.a], |node| node.name = "Draft after session ended".into());
+    r.guest.open_library_file(&file.id);
+    r.guest.desktop_tabs.shared.as_mut().unwrap().editor.end_collab();
+    r.guest.close_shared_tab();
+    assert!(r.guest.desktop_tabs.shared.is_none());
+    assert_shared_recovery(&root, r.a, "Draft after session ended");
+    drop(r);
+    std::fs::remove_dir_all(root).unwrap();
+}

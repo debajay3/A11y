@@ -178,6 +178,17 @@ impl CollabState {
 
 /// Runs the confirmed "Leave the session?" dialog.
 pub fn finish_dialog(app: &mut App, d: &Dialog) -> bool {
+    if d.intent == Intent::LeaveParkedSession {
+        if let Err(error) = app.save_parked_shared_recovery() {
+            app.show_toast(error, true);
+            return true;
+        }
+        app.desktop_tabs.shared = None;
+        if let Some(then) = app.collab.leave.take() {
+            then(app);
+        }
+        return true;
+    }
     if d.intent != Intent::LeaveSession {
         return false;
     }
@@ -294,6 +305,24 @@ impl App {
         self.collab.leave = Some(Box::new(then));
         self.dialog = Some(dialog);
         false
+    }
+
+    /// Window/account lifecycle actions must protect the background shared editor too.
+    pub(crate) fn leave_all_ok(&mut self, then: impl FnOnce(&mut App) + 'static) -> bool {
+        if self.collab.leave_dialog().is_some() {
+            return self.leave_ok(then);
+        }
+        if let Some(mut dialog) = self.desktop_tabs.shared.as_ref().and_then(|tab| tab.editor.collab.leave_dialog()) {
+            dialog.intent = Intent::LeaveParkedSession;
+            self.collab.leave = Some(Box::new(then));
+            self.dialog = Some(dialog);
+            return false;
+        }
+        if let Err(error) = self.save_parked_shared_recovery() {
+            self.show_toast(error, true);
+            return false;
+        }
+        true
     }
 
     /// Aborts a join that is still connecting.

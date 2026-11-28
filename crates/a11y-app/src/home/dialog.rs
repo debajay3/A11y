@@ -33,6 +33,7 @@ pub enum Intent {
     /// Leaving the open file while sharing it or joined to it.
     LeaveSession,
     CloseParkedSharedTab,
+    LeaveParkedSession,
 }
 
 /// One row of the project picker: a project or one of its folders.
@@ -450,6 +451,10 @@ pub fn finish(app: &mut App, d: Dialog) {
             Ok(())
         }
         Intent::CloseParkedSharedTab => {
+            if let Err(error) = app.save_parked_shared_recovery() {
+                app.show_toast(error, true);
+                return;
+            }
             app.desktop_tabs.shared = None;
             return;
         }
@@ -461,7 +466,13 @@ pub fn finish(app: &mut App, d: Dialog) {
             }
             Ok(())
         }
-        Intent::Shortcuts | Intent::About | Intent::LeaveSession | Intent::AuthorName | Intent::NameVersion(_) | Intent::OpenDevLink(_) => {
+        Intent::Shortcuts
+        | Intent::About
+        | Intent::LeaveSession
+        | Intent::LeaveParkedSession
+        | Intent::AuthorName
+        | Intent::NameVersion(_)
+        | Intent::OpenDevLink(_) => {
             dirty = false;
             Ok(())
         }

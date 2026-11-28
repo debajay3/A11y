@@ -135,6 +135,8 @@ impl App {
             if let Some(mut dialog) = tab.editor.collab.leave_dialog() {
                 dialog.intent = super::Intent::CloseParkedSharedTab;
                 self.dialog = Some(dialog);
+            } else if let Err(error) = self.save_parked_shared_recovery() {
+                self.show_toast(error, true);
             } else {
                 self.desktop_tabs.shared = None;
             }

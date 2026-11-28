@@ -45,6 +45,37 @@ impl Drop for ParkedSharedTab {
 }
 
 impl App {
+    /// Persist the background editor before any action can discard it. Use the owning
+    /// account's library, never the next account/workspace's storage.
+    pub(crate) fn save_parked_shared_recovery(&mut self) -> Result<(), String> {
+        let Some(tab) = self.desktop_tabs.shared.as_mut() else { return Ok(()) };
+        let lib = self.lib.as_ref().ok_or("Cannot preserve the shared draft: the library is unavailable")?;
+        crate::decks::ui::flush_notes(&mut tab.editor);
+        let text = tab.editor.doc.to_json().map_err(|e| e.to_string())?;
+        let id = uuid::Uuid::new_v4();
+        let tmp = lib.root().join(format!(".shared-recovery-{id}.tmp"));
+        let dest = lib.root().join(format!("recovery-shared-{id}.a11y"));
+        (|| -> std::io::Result<()> {
+            use std::io::Write;
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(&tmp)?;
+            file.write_all(text.as_bytes())?;
+            file.sync_all()?;
+            drop(file);
+            std::fs::rename(&tmp, &dest)
+        })()
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            format!("Could not preserve the shared draft: {e}. Keep A11y open and try again.")
+        })
+    }
+
     pub(crate) fn can_park_shared_tab(&self) -> bool {
         cfg!(feature = "enhanced-desktop") && self.collab.is_guest() && self.lib_file.is_none() && self.desktop_tabs.shared.is_none()
     }

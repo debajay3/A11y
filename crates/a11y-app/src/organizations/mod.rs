@@ -27,6 +27,10 @@ impl App {
     }
 
     pub(crate) fn switch_organization(&mut self, id: Option<String>) {
+        let again = id.clone();
+        if !self.leave_all_ok(move |app| app.switch_organization(again)) {
+            return;
+        }
         if self.home.is_none() {
             self.go_home();
             if self.home.is_none() {
@@ -45,6 +49,12 @@ impl App {
     }
 
     pub(crate) fn create_organization_with_logo(&mut self, name: &str, logo: Option<Vec<u8>>) -> bool {
+        let again = (name.to_owned(), logo.clone());
+        if !self.leave_all_ok(move |app| {
+            app.create_organization_with_logo(&again.0, again.1);
+        }) {
+            return false;
+        }
         if self.home.is_none() {
             self.go_home();
             if self.home.is_none() {
