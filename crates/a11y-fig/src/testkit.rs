@@ -565,7 +565,12 @@ pub fn figma_like_schema() -> Schema {
 
     let blob = b.define("Blob", DefKind::Message);
     b.field(blob, "bytes", nat(Byte), true, 1);
+    let region = b.define("ClipboardSelectionRegion", DefKind::Message);
+    let guid = def(&b, "GUID");
+    b.field(region, "nodes", guid, true, 1);
     let msg = b.define("Message", DefKind::Message);
+    let selection = def(&b, "ClipboardSelectionRegion");
+    b.field(msg, "clipboardSelectionRegions", selection, true, 3);
     let (nct, bt) = (def(&b, "NodeChange"), def(&b, "Blob"));
     b.field(msg, "nodeChanges", nct, true, 1);
     b.field(msg, "blobs", bt, true, 2);
@@ -796,6 +801,17 @@ pub fn sample_fig(how: Compression, zipped: bool) -> Vec<u8> {
     let mut images = BTreeMap::new();
     images.insert(crate::kiwi::hex(&IMAGE_HASH), vec![0x89, b'P', b'N', b'G']);
     container::write_zip(&canvas, &images, Some(&serde_json::json!({"file_name": "Sample file"})))
+}
+
+/// A clipboard message selecting the Card frame from the sample file.
+pub fn clipboard_fig() -> Vec<u8> {
+    let schema = figma_like_schema();
+    let root = schema.find("Message").unwrap();
+    let V::Message(mut message) = sample_message() else { unreachable!() };
+    let region = msg(vec![("nodes", V::Array(vec![guid(1, 1)]))]);
+    message.push(("clipboardSelectionRegions".into(), V::Array(vec![region])));
+    let body = schema.encode_message(root, &V::Message(message)).unwrap();
+    container::write_container(&schema.encode(), &body, Compression::Zstd, 101)
 }
 
 // ---- upgrade fixture: geometry, styles, grids, text clamping, instance overrides

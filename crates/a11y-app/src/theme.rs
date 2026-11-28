@@ -199,11 +199,11 @@ pub const PAGES_MAX_VISIBLE_ROWS: usize = 5;
 pub const PAGE_MENU_WIDTH: f32 = 160.0;
 pub const LAYER_HEADER_HEIGHT: f32 = 40.0;
 pub const LAYER_ROW_HEIGHT: f32 = 32.0;
-pub const LAYER_INDENT: f32 = 16.0;
+pub const LAYER_INDENT: f32 = 21.0;
 pub const LAYER_CHEVRON_BOX: f32 = 24.0;
 pub const LAYER_CHEVRON_PAD: f32 = 8.0;
 pub const LAYER_ICON_SIZE: f32 = 16.0;
-pub const LAYER_ICON_GAP: f32 = 0.0;
+pub const LAYER_ICON_GAP: f32 = 2.0;
 pub const LAYER_TOGGLE_SIZE: f32 = 24.0;
 pub const LAYER_DROP_THICKNESS: f32 = 2.0;
 

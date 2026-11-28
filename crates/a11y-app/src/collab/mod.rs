@@ -157,7 +157,7 @@ impl CollabState {
         self.host.is_some() || self.guest.as_ref().is_some_and(|g| g.live())
     }
     /// The question to ask before leaving the file, if there is a live session to lose.
-    fn leave_dialog(&self) -> Option<Dialog> {
+    pub(crate) fn leave_dialog(&self) -> Option<Dialog> {
         let (title, body, ok) = if let Some(h) = &self.host {
             let body = match h.peers.len() {
                 0 => "Nobody is in the file now. The link stops working.".to_string(),
@@ -178,6 +178,17 @@ impl CollabState {
 
 /// Runs the confirmed "Leave the session?" dialog.
 pub fn finish_dialog(app: &mut App, d: &Dialog) -> bool {
+    if d.intent == Intent::LeaveParkedSession {
+        if let Err(error) = app.save_parked_shared_recovery() {
+            app.show_toast(error, true);
+            return true;
+        }
+        app.desktop_tabs.shared = None;
+        if let Some(then) = app.collab.leave.take() {
+            then(app);
+        }
+        return true;
+    }
     if d.intent != Intent::LeaveSession {
         return false;
     }
@@ -254,6 +265,9 @@ impl App {
     }
 
     pub fn join_session_network(&mut self, ctx: &egui::Context, text: &str, name: &str, password: &str, network: a11y_net::Network) -> Result<(), String> {
+        if self.desktop_tabs.shared.is_some() {
+            return Err("Close the open shared tab before joining another session.".into());
+        }
         let ticket = a11y_net::Ticket::parse(text).map_err(|_| "That does not look like an A11y session link. It starts with a11y://join/".to_string())?;
         if ticket.password_required && password.is_empty() {
             return Err("This session needs a password. Ask the person who shared it.".into());
@@ -291,6 +305,24 @@ impl App {
         self.collab.leave = Some(Box::new(then));
         self.dialog = Some(dialog);
         false
+    }
+
+    /// Window/account lifecycle actions must protect the background shared editor too.
+    pub(crate) fn leave_all_ok(&mut self, then: impl FnOnce(&mut App) + 'static) -> bool {
+        if self.collab.leave_dialog().is_some() {
+            return self.leave_ok(then);
+        }
+        if let Some(mut dialog) = self.desktop_tabs.shared.as_ref().and_then(|tab| tab.editor.collab.leave_dialog()) {
+            dialog.intent = Intent::LeaveParkedSession;
+            self.collab.leave = Some(Box::new(then));
+            self.dialog = Some(dialog);
+            return false;
+        }
+        if let Err(error) = self.save_parked_shared_recovery() {
+            self.show_toast(error, true);
+            return false;
+        }
+        true
     }
 
     /// Aborts a join that is still connecting.
@@ -384,7 +416,7 @@ impl App {
 
 /// One frame of session work. Call at the start of every frame, before the UI draws.
 pub fn pump(app: &mut App, ctx: &egui::Context) {
-    if !app.collab.active() {
+    if !app.collab.active() && app.desktop_tabs.shared.is_none() {
         return;
     }
     let local = Local { pointer: ctx.input(|i| i.pointer.hover_pos()), esc: ctx.input(|i| i.key_pressed(egui::Key::Escape)) && app.dialog.is_none() };
@@ -395,9 +427,18 @@ pub fn pump(app: &mut App, ctx: &egui::Context) {
 
 /// [`pump`] without egui: returns when the next frame is wanted, in seconds.
 pub fn pump_with(app: &mut App, now: f64, local: &Local) -> Option<f64> {
+    let background = app.desktop_tabs.shared.as_mut().and_then(|tab| {
+        tab.editor.now = now;
+        let wait = pump_with(&mut tab.editor, now, &Local::default());
+        crate::canvas::tiles::take_rev(&mut tab.editor);
+        wait
+    });
+    if !app.collab.active() {
+        return background;
+    }
     let dt = (now - app.collab.last_now).clamp(0.0, 0.25);
     app.collab.last_now = now;
-    let mut wake: f64 = 0.5;
+    let mut wake = background.map_or(0.5, |wait| wait.min(0.5));
     host_io(app, now, &mut wake);
     guest_io(app, now, &mut wake);
 
@@ -430,7 +471,7 @@ pub fn pump_with(app: &mut App, now: f64, local: &Local) -> Option<f64> {
 fn local_presence(app: &mut App, local: &Local, peer: u32) -> Presence {
     let r = app.canvas_rect;
     let round = |v: f32| (v * 10.0).round() / 10.0;
-    let cursor = local.pointer.filter(|p| r.contains(*p)).map(|p| {
+    let cursor = local.pointer.filter(|p| app.home.is_none() && r.contains(*p)).map(|p| {
         let v = app.view.to_page(r.min, p);
         [round(v.x), round(v.y)]
     });

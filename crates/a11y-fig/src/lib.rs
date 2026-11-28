@@ -32,7 +32,7 @@ pub use a11y_doc::Document;
 pub use export::export_rest_json;
 #[doc(hidden)]
 pub use fig::import_fig_node_changes;
-pub use fig::{commands_blob_to_path, decode_fig_to_json, import_fig};
+pub use fig::{commands_blob_to_path, decode_fig_to_json, import_fig, import_fig_selection};
 pub use proto::{gamepad_button_code, gamepad_button_name, key_code, key_name};
 pub use rest_import::{image_refs, import_rest_json};
 pub use variables::{export_variables_json, export_variables_meta, import_variables_json, import_variables_value};

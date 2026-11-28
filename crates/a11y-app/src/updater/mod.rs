@@ -244,7 +244,7 @@ impl App {
             return;
         }
         self.updater.dialog = false;
-        if self.leave_ok(|app| app.restart_unless_unsaved()) {
+        if self.leave_all_ok(|app| app.request_restart()) {
             self.restart_unless_unsaved();
         }
     }

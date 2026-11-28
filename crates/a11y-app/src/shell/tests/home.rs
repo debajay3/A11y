@@ -238,6 +238,25 @@ fn dragging_a_card_onto_a_project_moves_the_file() {
 }
 
 #[test]
+fn the_sidebar_lists_files_under_their_folder_and_opens_them() {
+    let (mut s, _d) = home_sim();
+    let l = lib(&s);
+    let project = l.list_projects()[0].id.clone();
+    let folder = l.create_folder(&project, None, "File holder").unwrap();
+    let file = l.create_file(&project, Some(&folder.id), "Checkout", &Document::new("Checkout")).unwrap();
+    s.shell.app.home.as_mut().unwrap().dirty = true;
+    s.frame(vec![]);
+
+    let folder_row = s.rect_of("home-project-File holder");
+    let file_row = s.rect_of("home-tree-file-Checkout");
+    assert_eq!(file_row.top(), folder_row.bottom());
+    s.click(folder_row.center());
+    assert_eq!(s.app().home.as_ref().unwrap().section, Section::Project(project, Some(folder.id)));
+    s.click(file_row.center());
+    assert_eq!(s.app().lib_file.as_ref().unwrap().id, file.id);
+}
+
+#[test]
 fn search_filters_files_and_the_sidebar_navigates_sections() {
     let (mut s, _d) = home_sim();
     let l = lib(&s);

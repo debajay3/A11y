@@ -183,6 +183,48 @@ fn layer_filter_narrows_the_tree_and_clears_with_escape() {
     assert!(crate::panels::layers::visible_rows(s.app()).len() >= all, "the whole tree is back");
 }
 
+#[test]
+fn double_clicking_a_layer_row_focuses_that_layer() {
+    let mut s = Sim::new();
+    let mut doc = a11y_doc::Document::new("Layer focus");
+    let page = doc.add_page("Page 1");
+    let mut layers = Vec::new();
+    for (index, kind) in [NodeKind::Frame(Default::default()), NodeKind::Section, NodeKind::Group, NodeKind::Rectangle].into_iter().enumerate() {
+        let id = doc.alloc_id();
+        let mut node = a11y_doc::Node::new(id, kind);
+        node.size = DV::new(240.0, 140.0);
+        node.transform = a11y_doc::Affine::translate(4000.0 + 2000.0 * index as f32, 5000.0);
+        doc.insert(page, node).unwrap();
+        layers.push(id);
+    }
+    s.shell.app.replace_document(doc, None);
+    s.frame(vec![]);
+
+    for &id in &layers {
+        let row = s.rect_of(&format!("layer-row-{}", id.0));
+        let click = Pos2::new(row.left() + 84.0, row.center().y);
+        let previous_view = s.app().view;
+        s.click(click);
+        assert_eq!(s.app().selection, [id]);
+        assert_eq!(s.app().view.offset, previous_view.offset);
+        assert_eq!(s.app().view.zoom, previous_view.zoom);
+        s.click(click);
+
+        let app = s.app();
+        assert_eq!(app.selection, [id]);
+        assert!(app.layers.renaming.is_none());
+        let bounds = app.selection_bounds().unwrap();
+        let center = app.view.to_screen(app.canvas_rect.min, DV::new(bounds.x + bounds.w / 2.0, bounds.y + bounds.h / 2.0));
+        assert!(
+            center.distance(app.canvas_rect.center()) < 1.0,
+            "layer {id:?} projected to {center:?}, expected the canvas center {:?}",
+            app.canvas_rect.center()
+        );
+    }
+    s.key(Key::F2);
+    assert_eq!(s.app().layers.renaming, layers.last().copied());
+}
+
 // ---- selection commands
 
 #[test]

@@ -594,6 +594,13 @@ impl Shell {
                     app.nudge(dx, dy);
                 }
             }
+            Key::F2 if !m.shift && !m.alt && !app.read_only() => {
+                if let [id] = app.selection.as_slice() {
+                    app.layers.renaming = Some(*id);
+                    app.layers.rename_started = false;
+                    app.layers.rename_seen = false;
+                }
+            }
             Key::Num1 if m.shift => menus::run(app, ctx, Action::FitAll),
             Key::Num2 if m.shift => menus::run(app, ctx, Action::FitSelection),
             Key::Num0 if m.shift => menus::run(app, ctx, Action::Zoom100),
@@ -745,36 +752,53 @@ impl Shell {
         ctx.request_repaint();
     }
 
-    /// Files dropped on the window: `.svg` files are placed at the drop point,
-    /// anything else (the first file) is opened as a document.
+    /// Places images dropped on the canvas and opens other files as documents.
     fn handle_drops(&mut self, ctx: &Context) {
+        fn file_name(file: &egui::DroppedFile) -> &std::path::Path {
+            file.path.as_deref().unwrap_or_else(|| std::path::Path::new(&file.name))
+        }
+
         let (files, pos) = ctx.input(|i| (i.raw.dropped_files.clone(), i.pointer.hover_pos().or(i.pointer.latest_pos())));
-        let is_svg = |f: &egui::DroppedFile| {
-            let name = f.path.as_ref().and_then(|p| p.to_str()).unwrap_or(&f.name);
-            name.rsplit('.').next().is_some_and(|e| e.eq_ignore_ascii_case("svg"))
-        };
-        if let Some(path) = files.iter().filter(|f| !is_svg(f)).find_map(|f| f.path.clone()) {
+        let files: Vec<_> = files
+            .into_iter()
+            .map(|file| {
+                let extension = file_name(&file).extension().and_then(|ext| ext.to_str()).unwrap_or_default().to_ascii_lowercase();
+                (file, extension)
+            })
+            .collect();
+        let is_image = |extension: &str| matches!(extension, "svg" | "png" | "jpg" | "jpeg" | "webp");
+        if let Some(path) = files.iter().filter(|(_, ext)| !is_image(ext)).find_map(|(file, _)| file.path.clone()) {
             self.app.request_open(crate::instance::Open::File(path));
             return;
         }
-        for (nth, f) in files.iter().filter(|f| is_svg(f)).enumerate() {
-            let text = match (&f.path, &f.bytes) {
-                (Some(p), _) => std::fs::read_to_string(p).map_err(|e| format!("Cannot read {}: {e}", p.display())),
-                (None, Some(b)) => String::from_utf8(b.to_vec()).map_err(|_| "The SVG is not valid UTF-8".to_string()),
+        if self.app.read_only() {
+            return;
+        }
+        let canvas = self.app.canvas_rect;
+        let screen = pos.filter(|p| canvas.contains(*p)).unwrap_or(canvas.center());
+        let page = self.app.view.to_page(canvas.min, screen);
+        for (nth, (file, extension)) in files.iter().filter(|(_, ext)| is_image(ext)).enumerate() {
+            let bytes = match (&file.path, &file.bytes) {
+                (_, Some(bytes)) => bytes.to_vec(),
+                (Some(path), None) => match std::fs::read(path) {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        self.app.show_toast(format!("Cannot read {}: {error}", path.display()), true);
+                        continue;
+                    }
+                },
                 (None, None) => continue,
             };
-            let stem = f
-                .path
-                .as_deref()
-                .and_then(|p| p.file_stem())
-                .and_then(|s| s.to_str())
-                .or_else(|| f.name.strip_suffix(".svg"))
-                .filter(|s| !s.is_empty())
-                .unwrap_or("svg")
-                .to_string();
-            match text {
-                Ok(t) => crate::clipboard::drop_svg(&mut self.app, &t, &stem, pos, nth),
-                Err(e) => self.app.show_toast(e, true),
+            let name = file_name(file).file_stem().and_then(|stem| stem.to_str()).filter(|stem| !stem.is_empty());
+            if extension == "svg" {
+                match String::from_utf8(bytes) {
+                    Ok(svg) => crate::clipboard::drop_svg(&mut self.app, &svg, name.unwrap_or("svg"), pos, nth),
+                    Err(_) => self.app.show_toast("The SVG is not valid UTF-8", true),
+                }
+            } else {
+                let offset = 24.0 * nth as f32;
+                let target = a11y_doc::Vec2::new(page.x + offset, page.y + offset);
+                crate::canvas::interact::place_image_bytes(&mut self.app, target, name.unwrap_or("Image"), bytes);
             }
         }
     }

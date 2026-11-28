@@ -8,7 +8,8 @@ use crate::{
     edit::Tx,
     layout,
 };
-use a11y_doc::{Command, NodeKind};
+use a11y_doc::{Command, NodeKind, Vec2};
+use base64::{engine::general_purpose::STANDARD, Engine};
 
 pub fn paste(app: &mut App, text_event: Option<&str>) {
     paste_at(app, text_event, None);
@@ -26,6 +27,11 @@ pub fn paste_at(app: &mut App, text_event: Option<&str>, at: Option<egui::Pos2>)
     }
     // Synthetic paste events in tests must not depend on the workstation clipboard.
     let mut clipboard = if cfg!(test) && text_event.is_some() { None } else { arboard::Clipboard::new().ok() };
+    if let Some(html) = clipboard.as_mut().and_then(|clipboard| clipboard.get().html().ok()) {
+        if paste_figma(app, &html, center) {
+            return;
+        }
+    }
     #[cfg(target_os = "macos")]
     if !cfg!(test) || text_event.is_none() {
         if let Some(svg) = super::macos::svg() {
@@ -72,6 +78,20 @@ pub fn paste_at(app: &mut App, text_event: Option<&str>, at: Option<egui::Pos2>)
         None if clipboard.is_none() => app.paste_at(None, point),
         None => app.show_toast("No supported clipboard content", false),
     }
+}
+
+fn paste_figma(app: &mut App, html: &str, at: Vec2) -> bool {
+    let Some((_, payload)) = html.split_once("<!--(figma)") else { return false };
+    let result = (|| {
+        let (payload, _) = payload.split_once("(/figma)-->").ok_or_else(|| "incomplete data".to_owned())?;
+        let bytes = STANDARD.decode(payload.trim()).map_err(|error| error.to_string())?;
+        let (doc, roots) = a11y_fig::import_fig_selection(&bytes).map_err(|error| error.to_string())?;
+        super::figma::paste(app, doc, &roots, at)
+    })();
+    if let Err(error) = result {
+        app.show_toast(format!("Cannot paste Figma layers: {error}. Try Copy as SVG."), true);
+    }
+    true
 }
 
 fn is_design_text(text: &str) -> bool {
@@ -142,6 +162,31 @@ fn paste_files(app: &mut App, paths: Vec<PathBuf>, at: Option<egui::Pos2>) {
 mod tests {
     use super::*;
     use a11y_doc::Document;
+
+    #[test]
+    fn figma_clipboard_pastes_only_the_selected_layers_as_editable_content() {
+        let bytes = a11y_fig::testkit::clipboard_fig();
+        let html = format!(r#"<span data-buffer="<!--(figma){}(/figma)-->"></span>"#, STANDARD.encode(bytes));
+        let mut doc = Document::new("Destination");
+        let page = doc.add_page("Page 1");
+        let mut app = App::new(doc);
+        assert!(paste_figma(&mut app, &html, Vec2::new(40.0, 60.0)));
+        assert_eq!(app.selection.len(), 1);
+        let card = app.doc.get(app.selection[0]).unwrap();
+        assert_eq!(card.name, "Card");
+        assert_eq!(card.size, Vec2::new(200.0, 300.0));
+        assert_eq!(card.corner_radii, [12.0; 4]);
+        assert!(card.kind.frame_props().unwrap().auto_layout.is_some());
+        assert_eq!(card.transform.translation(), Vec2::new(40.0, 60.0));
+        let instance = app.doc.get(*card.children.last().unwrap()).unwrap();
+        assert!(matches!(&instance.kind, NodeKind::Instance { component: Some(id), .. } if card.children.contains(id)));
+        let text = app.doc.get(card.children[0]).unwrap().kind.any_text().unwrap();
+        assert_eq!(text.content, "Hi \u{1F600}!");
+        assert_eq!(text.style.font_weight, 500);
+        assert_eq!(app.doc.get(page).unwrap().children, app.selection);
+        app.undo();
+        assert!(app.doc.get(page).unwrap().children.is_empty());
+    }
 
     #[test]
     fn external_plain_text_creates_an_editable_layer_and_undoes() {

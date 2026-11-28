@@ -2,6 +2,7 @@
 //! and SVG markup pasted as text.
 
 pub(crate) mod external;
+mod figma;
 #[cfg(target_os = "macos")]
 mod macos;
 

@@ -145,7 +145,7 @@ fn save_private(root: &Path, name: &str, value: &impl Serialize) -> Result<(), S
 }
 impl App {
     pub(crate) fn sign_out_workspace(&mut self) {
-        if !self.leave_ok(|app| app.sign_out_workspace()) {
+        if !self.leave_all_ok(|app| app.sign_out_workspace()) {
             return;
         }
         self.go_home();

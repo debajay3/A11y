@@ -13,7 +13,6 @@ use std::sync::{Arc, Mutex};
 pub enum Icon {
     Logo,
     File,
-    Assets,
     Tools,
     Variables,
     Help,
@@ -154,7 +153,6 @@ impl Icon {
     pub const ALL: &'static [Icon] = &[
         Icon::Logo,
         Icon::File,
-        Icon::Assets,
         Icon::Tools,
         Icon::Variables,
         Icon::Help,
@@ -290,7 +288,6 @@ impl Icon {
             Icon::GridView => "layout-grid",
             Icon::ListView => "list",
             Icon::Book => "book",
-            Icon::Assets => "library",
             Icon::Tools => "wrench",
             Icon::Variables => "hexagon",
             Icon::Help => "circle-help",
@@ -424,7 +421,6 @@ lucide!(
     "chevron-left",
     "chevrons-down-up",
     "file",
-    "library",
     "wrench",
     "hexagon",
     "circle-help",
@@ -608,11 +604,17 @@ pub fn paint(p: &Painter, icon: Icon, center: Pos2, size: f32, col: Color32) {
 
 /// Temporary A11y mark: two allies form an A with an open centre.
 fn paint_logo(p: &Painter, center: Pos2, size: f32) {
+    let tile = Rect::from_center_size(center, Vec2::splat(size));
+    p.rect_filled(tile, size / 4.0, theme::LOGO_GRADIENT_A);
+    paint_brand_mark(p, center, size, Color32::WHITE);
+}
+
+/// A11y’s mark without the tile, for the main menu button.
+pub(crate) fn paint_brand_mark(p: &Painter, center: Pos2, size: f32, color: Color32) {
     let k = size / 16.0;
     let o = Pos2::new(center.x - size / 2.0, center.y - size / 2.0);
     let pt = |x: f32, y: f32| Pos2::new(o.x + x * k, o.y + y * k);
-    p.rect_filled(Rect::from_min_size(o, Vec2::splat(size)), 4.0 * k, theme::LOGO_GRADIENT_A);
-    let stroke = egui::Stroke::new(1.6 * k, Color32::WHITE);
+    let stroke = egui::Stroke::new(1.6 * k, color);
     p.line_segment([pt(4.0, 12.0), pt(8.0, 4.0)], stroke);
     p.line_segment([pt(8.0, 4.0), pt(12.0, 12.0)], stroke);
     p.line_segment([pt(6.0, 9.0), pt(10.0, 9.0)], stroke);
@@ -643,7 +645,7 @@ mod tests {
         for i in Icon::ALL {
             assert!(seen.insert(*i), "{i:?} listed twice");
         }
-        assert_eq!(seen.len(), 124);
+        assert_eq!(seen.len(), 123);
     }
 
     #[test]
